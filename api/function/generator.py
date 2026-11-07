@@ -343,29 +343,34 @@ def full_payload(
     return payload
 
 
-def at_level(payload: Dict[str, Any], fields: Dict[str, Any], level: str) -> Dict[str, Any]:
-    """Trim a full payload down to a ladder level (always a fresh copy)."""
+def at_level(
+    payload: Dict[str, Any], fields: Dict[str, Any], greeting: str, level: str
+) -> Dict[str, Any]:
+    """Trim a full payload down to a ladder level (always a fresh copy).
+
+    `greeting` is the polished greeting text; below the full level the greet
+    node no longer exists, so the payload's own `greeting` field speaks it
+    instead (as static text, without the {{owner_line}} variable).
+    """
     import copy as _copy
 
     trimmed = _copy.deepcopy(payload)
     if level == "full":
         return trimmed
+    spoken = _speak_greeting(fields, greeting, owner_line=False)
     if level == "no_workflow":
-        # No conversation flow, so the greeting speaks the greet node's text
-        # (owner_line is a webhook variable; keep it out of static text).
         trimmed.pop("conversation_flow", None)
-        trimmed["greeting"] = _speak_greeting(fields, trimmed.get("greeting") or "", owner_line=False)
+        trimmed["greeting"] = spoken
         return trimmed
     if level == "no_tools":
         trimmed.pop("conversation_flow", None)
         trimmed.pop("tools", None)
-        trimmed["greeting"] = _speak_greeting(fields, trimmed.get("greeting") or "", owner_line=False)
+        trimmed["greeting"] = spoken
         return trimmed
     # minimal: the barest thing Telnyx will still accept.
-    mini = {
+    return {
         "name": trimmed["name"],
         "instructions": trimmed["instructions"],
-        "greeting": trimmed.get("greeting") or _speak_greeting(fields, "", owner_line=False),
+        "greeting": spoken,
         "telephony": trimmed.get("telephony"),
     }
-    return mini
