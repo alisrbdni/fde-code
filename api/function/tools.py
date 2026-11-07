@@ -292,7 +292,10 @@ async def delete_agent(app, trace, args) -> Dict[str, Any]:
 def _schema(properties: Dict[str, Any], required: List[str]) -> Dict[str, Any]:
     merged: Dict[str, Any] = dict(COMMON_ARGS)
     merged.update(properties)
-    return mergedTOOL_DEFS: List[Dict[str, Any]] = [
+    return merged
+
+
+TOOL_DEFS: List[Dict[str, Any]] = [
     _tool(
         "list_templates",
         "List the ready-made agent templates (label, purpose, and the facts they ask for).",
