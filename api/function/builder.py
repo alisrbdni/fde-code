@@ -12,7 +12,7 @@ from __future__ import annotations
 import copy
 import secrets
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from . import generator, log
 from .config import mask_phone
@@ -360,3 +360,65 @@ async def run_due_jobs(app: Any, trace: Any, owner: str) -> Dict[str, Any]:
     except Exception as exc:
         log("warn", "ops.record_failed", route="alarm", error=str(exc)[:160])
     return {"ran": len(due), "results": results}
+
+
+async def record_build(app: Any, trace: Any, **info: Any) -> None:
+    """Archive a finished build: registry upsert + storage snapshot.
+
+    Best effort by design — a registry or storage outage is logged and
+    swallowed, never a failed build. The stored payload is redacted, the owner
+    masked, and prompts never store raw secrets.
+    """
+    try:
+        from .storage import redact_payload
+    except Exception:
+        async def redact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+            return copy.deepcopy(payload)
+
+    try:
+        now = _ms()
+        key = str(info["key"])
+        redacted = redact_payload(copy.deepcopy(info["payload"]))
+        current = await app.state.call("registry", "global", "get", key, trace_id=trace.trace_id)
+        version = int(((current.get("agent") or {}).get("builds")) or 0) + 1
+        source = "console" if str(info.get("call_id") or "").startswith("web_") else "phone"
+        rec = {
+            "key": key,
+            "owner": info["owner"],
+            "name": info.get("name") or "",
+            "business": (info.get("fields") or {}).get("business_name") or "",
+            "assistantId": info["assistant_id"],
+            "level": info["level"],
+            "status": "active",
+            "expiresAt": info["expires_at"],
+            "source": source,
+            "lastTraceId": trace.trace_id,
+            "lastVersion": version,
+            "archive": f"forge/builds/{key}/latest.json",
+        }
+        upserted = await app.state.call(
+            "registry", "global", "upsert", rec, now, trace_id=trace.trace_id
+        )
+        version = int(((upserted.get("agent") or {}).get("builds")) or version)
+        document = {
+            "agent_key": key,
+            "version": version,
+            "built_at": now,
+            "trace_id": trace.trace_id,
+            "owner": mask_phone(info["owner"]),
+            "assistant_id": info["assistant_id"],
+            "rebuild": bool(info.get("rebuild")),
+            "feature_level": info["level"],
+            "ladder_warnings": info.get("warnings") or [],
+            "persona_source": info.get("persona_source") or "template",
+            "persona": info.get("persona") or "",
+            "greeting": info.get("greeting") or "",
+            "input": info.get("fields") or {},
+            "payload": redacted,
+            "spans": list(trace.spans),
+        }
+        async with trace.span("storage.put_json"):
+            await app.storage.put_json(f"forge/builds/{key}/v{version}.json", document)
+            await app.storage.put_json(f"forge/builds/{key}/latest.json", document)
+    except Exception as exc:
+        log("warn", "record_build_failed", agent_key=info.get("key"), error=str(exc)[:160])
