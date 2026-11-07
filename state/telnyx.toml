@@ -1,0 +1,36 @@
+name = "forge-state"
+main = "src/index.ts"
+
+[[actors]]
+binding = "BUILDER"
+class_name = "BuilderProfile"
+main = "src/actors/builder-profile.ts"
+
+[[actors]]
+binding = "OPS"
+class_name = "OpsMetrics"
+main = "src/actors/ops-metrics.ts"
+
+[[actors]]
+binding = "REGISTRY"
+class_name = "AgentRegistry"
+main = "src/actors/agent-registry.ts"
+
+[[actors]]
+binding = "SCHEDULE"
+class_name = "ClinicSchedule"
+main = "src/actors/clinic.ts"
+
+[[actors]]
+binding = "PATIENT"
+class_name = "ClinicPatient"
+main = "src/actors/clinic.ts"
+
+[[actors]]
+binding = "DESK"
+class_name = "ClinicDesk"
+main = "src/actors/clinic.ts"
+
+[edge_compute]
+func_id = "REPLACE_WITH_STATE_FUNC_ID"
+func_name = "forge-state"
