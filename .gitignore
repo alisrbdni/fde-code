@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+state/node_modules/
+*.tsbuildinfo
+
+# Env & secrets
+.env
+.env.local
+*.local.json
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Built artifacts
+dist/
+build/
+tmp/

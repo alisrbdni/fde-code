@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "telnyx": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Telnyx Inference",
+      "options": {
+        "baseURL": "https://api.telnyx.com/v2/ai/openai",
+        "apiKey": "{env:TELNYX_API_KEY}",
+        "headers": { "Authorization": "Bearer {env:TELNYX_API_KEY}" }
+      },
+      "models": {
+        "moonshotai/Kimi-K3": { "name": "Kimi K3", "tool_call": true, "limit": { "context": 131072, "output": 8192 } },
+        "deepseek-ai/DeepSeek-V4-Flash-0731": { "name": "DeepSeek V4 Flash", "tool_call": true, "limit": { "context": 131072, "output": 8192 } }
+      }
+    }
+  },
+  "model": "telnyx/moonshotai/Kimi-K3"
+}

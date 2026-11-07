@@ -1,0 +1,30 @@
+flowchart LR
+  U([Caller]) -- "1. calls Forge" --> F[Forge assistant<br/>14-node workflow]
+  P([Patient]) -- "calls the clinic" --> C[Clara assistant<br/>13-node workflow]
+  F -- "handoff tool<br/>(medical callers)" --> C
+  B([Browser]) -- "/ui console" --> API
+  F -- "dynamic vars / MCP /mcp /<br/>check_draft, build_agent" --> API
+  C -- "dynamic vars / MCP /clinic/mcp /<br/>triage, book" --> API
+  subgraph EDGE[Telnyx Edge Compute]
+    API[forge-api<br/>Python Edge Function<br/>webhooks · 2 MCP servers · build pipeline<br/>console + workflow simulator]
+    ST[forge-state<br/>TypeScript Function<br/>/rpc gateway]
+    BP[(BuilderProfile<br/>1 per owner<br/>draft · lock · quota · inbox · alarm)]
+    OM[(OpsMetrics global<br/>shared: API via RPC +<br/>alarms via binding)]
+    RG[(AgentRegistry global)]
+    CS[(ClinicSchedule<br/>1 per clinician)]
+    CP[(ClinicPatient<br/>1 per patient)]
+    CD[(ClinicDesk global)]
+    KV[(Telnyx KV<br/>flags/global · flags/clinic<br/>agents/key · cache/polish · cache/triage<br/>session/chat)]
+    API -- "RPC + trace id" --> ST
+    ST --> BP & OM & RG & CS & CP & CD
+    BP -. "alarm: due jobs" .-> API
+    BP -. "binding" .-> OM
+    API -- REST --> KV
+  end
+  API -- "S3 SigV4" --> OS[(Telnyx Cloud Storage<br/>build archives · booking docs)]
+  API -- "Inference: persona polish,<br/>triage fallback, console chat" --> INF[Telnyx Inference]
+  API -- "create / update / delete" --> AA[Telnyx Assistants API]
+  AA --> G[Generated agent<br/>own workflow + tools]
+  API -- "TeXML ai_calls" --> G
+  G -- "2. calls you back" --> U
+  G -- "is_owner / take_message" --> API
