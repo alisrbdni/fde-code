@@ -1,0 +1,565 @@
+{
+  "start_node_id": "welcome",
+  "nodes": [
+    {
+      "id": "welcome",
+      "name": "Welcome & disclosure",
+      "type": "speak",
+      "message": "Welcome to Agent Forge, powered by Telnyx. I'm Forge, an AI that builds voice AI agents while you wait. This call may be recorded. Every agent I build tells its callers that it's an AI, and it is deleted automatically after {{agent_ttl_hours}} hours. {{welcome_line}}"
+    },
+    {
+      "id": "router",
+      "name": "What would you like to do?",
+      "type": "prompt",
+      "instructions": "Find out what the caller wants to do: build a new agent, continue their saved draft ({{has_draft}}; saved business: {{draft_business}}), test an agent, hear their messages ({{unread_messages}} unread), or list or delete their agents. If they ask how Forge works, explain in two sentences: you ask about their business, save the answers, and build the agent while they wait. Ask one short question and wait for the answer. Do not call any tools in this step.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "discover",
+      "name": "Discover the business",
+      "type": "prompt",
+      "instructions": "Ask what business or project the agent is for, then what the agent should do for them. Offer a matching template when one fits, using list_templates. Save every answer with save_draft as soon as you hear it: business_name first, then purpose, then the template. If a save is blocked, read the `say` text you get and offer to build something else. Confirm what you heard before moving on. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "design",
+      "name": "Design the agent",
+      "type": "prompt",
+      "instructions": "Collect the agent's details one question at a time: the agent's name, the tone, the voice (offer two or three choices with list_voices), two to four facts callers may ask about, any special tasks, and an optional transfer number for urgent calls. Save each answer with save_draft as soon as you hear it, and confirm what you heard. Use get_draft before changing something. When you have the details, call check_draft and follow its message. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "review",
+      "name": "Review & confirm",
+      "type": "prompt",
+      "instructions": "Read the draft summary back to the caller, then ask: shall I build it? If they want to change or add something, save it with save_draft and call check_draft again before asking once more. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "build",
+      "name": "Build",
+      "type": "prompt",
+      "instructions": "Say: Great, building it now. This takes about ten seconds. Then call build_agent exactly once and read what comes back before you say anything else about the build. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "deliver",
+      "name": "Deliver & test",
+      "type": "prompt",
+      "instructions": "{{built_agent_name}} is live. Offer a test call to their phone with call_me_with_agent and read the `say` text back; remind them to hang up so their phone is free to receive it. Mention any unread messages and that the agent deletes itself after {{agent_ttl_hours}} hours. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "manage",
+      "name": "Manage agents",
+      "type": "prompt",
+      "instructions": "List their agents with list_my_agents, offer a test call with call_me_with_agent, read their messages with list_messages (read callback numbers digit by digit), delete an agent with delete_agent only after they clearly confirm which one, or start a fresh draft with start_new_draft. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "clinic_handoff",
+      "name": "Hand off to the clinic (Clara)",
+      "type": "prompt",
+      "instructions": "Say one short sentence: you are Forge, an agent builder, and Clara at Northside Family Clinic can book or change medical appointments. If the caller agrees, use the handoff tool. Never give medical advice.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "policy_decline",
+      "name": "Policy decline",
+      "type": "speak",
+      "message": "I can't build that one. I don't build agents that pretend to be a real company or a government office, ask callers for payment, banking, password or ID numbers, hide that they're an AI, or pressure people. I'm happy to build something else."
+    },
+    {
+      "id": "quota_full",
+      "name": "Quota reached",
+      "type": "speak",
+      "message": "You already have {{max_agents}} live agents, which is the limit on this line. I can delete one for you, or you can wait for one to expire."
+    },
+    {
+      "id": "paused",
+      "name": "Builds paused",
+      "type": "speak",
+      "message": "{{maintenance_message}}"
+    },
+    {
+      "id": "build_failed",
+      "name": "Build failed",
+      "type": "speak",
+      "message": "Something went wrong while building. Your draft is saved, so you can try again in a minute or two."
+    },
+    {
+      "id": "wrap",
+      "name": "Wrap up",
+      "type": "prompt",
+      "instructions": "Summarise what happened in one sentence and ask if there is anything else. If they say no, say a friendly goodbye and use the hangup tool. If a test call is on the way, remind them to hang up now so their phone is free.",
+      "instructions_mode": "append"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_welcome",
+      "start_node_id": "welcome",
+      "target": {
+        "type": "node",
+        "node_id": "router"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_router_paused",
+      "start_node_id": "router",
+      "target": {
+        "type": "node",
+        "node_id": "paused"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "builds_enabled"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "false"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_router_build",
+      "start_node_id": "router",
+      "target": {
+        "type": "node",
+        "node_id": "discover"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants to build a new agent or continue their saved draft."
+      }
+    },
+    {
+      "id": "e_router_manage",
+      "start_node_id": "router",
+      "target": {
+        "type": "node",
+        "node_id": "manage"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants to test an agent, hear messages, or list or delete their agents."
+      }
+    },
+    {
+      "id": "e_router_clinic",
+      "start_node_id": "router",
+      "target": {
+        "type": "node",
+        "node_id": "clinic_handoff"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller is a patient who wants to book, change or ask about a medical appointment, or describes their own symptoms, rather than building an agent."
+      }
+    },
+    {
+      "id": "e_router_wrap",
+      "start_node_id": "router",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller has nothing else they want to do."
+      }
+    },
+    {
+      "id": "e_discover_quota",
+      "start_node_id": "discover",
+      "target": {
+        "type": "node",
+        "node_id": "quota_full"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "quota_remaining"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "0"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_discover_policy",
+      "start_node_id": "discover",
+      "target": {
+        "type": "node",
+        "node_id": "policy_decline"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants an agent that impersonates a real company or government office, collects payment, banking, password or ID numbers, hides that it is an AI, or threatens or pressures people."
+      }
+    },
+    {
+      "id": "e_discover_design",
+      "start_node_id": "discover",
+      "target": {
+        "type": "node",
+        "node_id": "design"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The business name and what the agent should do are both known and saved."
+      }
+    },
+    {
+      "id": "e_design_review",
+      "start_node_id": "design",
+      "target": {
+        "type": "node",
+        "node_id": "review"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "draft_complete"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "true"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_design_timeout",
+      "start_node_id": "design",
+      "target": {
+        "type": "node",
+        "node_id": "review"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": ">=",
+          "left": {
+            "type": "variable",
+            "name": "telnyx_conversation_duration_secs"
+          },
+          "right": {
+            "type": "number_literal",
+            "value": 840
+          }
+        }
+      }
+    },
+    {
+      "id": "e_design_policy",
+      "start_node_id": "design",
+      "target": {
+        "type": "node",
+        "node_id": "policy_decline"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller asks for an agent that impersonates a real organisation, collects payment or ID numbers, hides that it is an AI, or pressures people."
+      }
+    },
+    {
+      "id": "e_review_build",
+      "start_node_id": "review",
+      "target": {
+        "type": "node",
+        "node_id": "build"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller clearly confirms they want the agent built now."
+      }
+    },
+    {
+      "id": "e_review_design",
+      "start_node_id": "review",
+      "target": {
+        "type": "node",
+        "node_id": "design"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants to change or add something substantial."
+      }
+    },
+    {
+      "id": "e_build_ready",
+      "start_node_id": "build",
+      "target": {
+        "type": "node",
+        "node_id": "deliver"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "build_status"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "ready"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_build_blocked",
+      "start_node_id": "build",
+      "target": {
+        "type": "node",
+        "node_id": "policy_decline"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "build_status"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "blocked"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_build_quota",
+      "start_node_id": "build",
+      "target": {
+        "type": "node",
+        "node_id": "quota_full"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "build_status"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "quota"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_build_incomplete",
+      "start_node_id": "build",
+      "target": {
+        "type": "node",
+        "node_id": "design"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "build_status"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "incomplete"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_build_paused",
+      "start_node_id": "build",
+      "target": {
+        "type": "node",
+        "node_id": "paused"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "build_status"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "paused"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_build_failed",
+      "start_node_id": "build",
+      "target": {
+        "type": "node",
+        "node_id": "build_failed"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "build_status"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "failed"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_deliver_wrap",
+      "start_node_id": "deliver",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "A test call has been scheduled, or the caller doesn't want one."
+      }
+    },
+    {
+      "id": "e_deliver_design",
+      "start_node_id": "deliver",
+      "target": {
+        "type": "node",
+        "node_id": "design"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants to change something about the agent."
+      }
+    },
+    {
+      "id": "e_manage_build",
+      "start_node_id": "manage",
+      "target": {
+        "type": "node",
+        "node_id": "discover"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants to build a new agent."
+      }
+    },
+    {
+      "id": "e_manage_wrap",
+      "start_node_id": "manage",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller has finished managing their agents."
+      }
+    },
+    {
+      "id": "e_policy_router",
+      "start_node_id": "policy_decline",
+      "target": {
+        "type": "node",
+        "node_id": "router"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_quota_manage",
+      "start_node_id": "quota_full",
+      "target": {
+        "type": "node",
+        "node_id": "manage"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_paused_wrap",
+      "start_node_id": "paused",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_failed_wrap",
+      "start_node_id": "build_failed",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_wrap_router",
+      "start_node_id": "wrap",
+      "target": {
+        "type": "node",
+        "node_id": "router"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller has another request."
+      }
+    },
+    {
+      "id": "e_clinic_router",
+      "start_node_id": "clinic_handoff",
+      "target": {
+        "type": "node",
+        "node_id": "router"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller doesn't want to be transferred, or actually wants to build an agent."
+      }
+    }
+  ]
+}

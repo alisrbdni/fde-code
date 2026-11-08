@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": { "@telnyx/edge-runtime": ["./local/edge-runtime-shim.ts"] }
+  }
+}

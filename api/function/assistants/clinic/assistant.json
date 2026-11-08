@@ -1,0 +1,127 @@
+{
+  "name": "Clara - Northside Family Clinic",
+  "model": "${ASSISTANT_MODEL}",
+  "instructions": "You are Clara, the AI phone assistant for Northside Family Clinic, a multi-specialty clinic at 200 Harbor Avenue, Suite 3. You help callers find the right clinician for what they describe, check availability and book, change or cancel appointments. This is a phone call: short sentences, one question at a time, no lists or symbols, read times naturally. You are an AI and you say so if asked. You never diagnose, never name a likely condition, never suggest treatments or medication doses, and never ask for insurance numbers, card numbers or social security numbers. Triage tools decide urgency; follow their result. If anyone describes an emergency, tell them to hang up and dial 911. The current time is {{telnyx_current_time}}.",
+  "greeting": "",
+  "dynamic_variables_webhook_url": "${API_URL}/clinic/webhook/dynamic-variables",
+  "dynamic_variables_webhook_timeout_ms": 2500,
+  "dynamic_variables": {
+    "clinic_welcome_line": "How can I help you today? I can book a visit, change an appointment, or answer questions about the clinic.",
+    "caller_phone": "",
+    "patient_known": "false",
+    "patient_name": "",
+    "visit_count": "1",
+    "upcoming_count": "0",
+    "next_appointment": "",
+    "booking_enabled": "true",
+    "paused_message": "",
+    "front_desk_open": "true",
+    "triage_urgency": "none",
+    "matched_specialty": "",
+    "specialty_label": "",
+    "booking_status": "none",
+    "booking_line": "",
+    "degraded": "false",
+    "trace_id": ""
+  },
+  "telephony": {
+    "time_limit_secs": 900,
+    "user_idle_timeout_secs": 45,
+    "default_texml_app_id": "${TEXML_APP_ID}"
+  },
+  "tools": [
+    {
+      "name": "triage_symptoms",
+      "type": "webhook",
+      "webhook": {
+        "description": "Decide who the caller should see and how soon, from their own words. Urgency comes from rules.",
+        "url": "${API_URL}/clinic/tools/triage",
+        "method": "POST",
+        "headers": {
+          "Authorization": "Bearer ${MCP_TOKEN}"
+        },
+        "body": {
+          "caller_phone": "{{telnyx_end_user_target}}",
+          "call_id": "{{call_control_id}}"
+        },
+        "body_parameters": {
+          "type": "object",
+          "properties": {
+            "symptoms": {
+              "type": "string",
+              "description": "What the caller described, in their own words."
+            },
+            "age": {
+              "type": "integer",
+              "description": "The patient's age in years, if mentioned."
+            },
+            "for_child": {
+              "type": "boolean",
+              "description": "True when the visit is for a child."
+            }
+          },
+          "required": [
+            "symptoms"
+          ]
+        }
+      }
+    },
+    {
+      "name": "book_appointment",
+      "type": "webhook",
+      "webhook": {
+        "description": "Book one of the options from check_availability with its slot_id and the patient's full name.",
+        "url": "${API_URL}/clinic/tools/book",
+        "method": "POST",
+        "headers": {
+          "Authorization": "Bearer ${MCP_TOKEN}"
+        },
+        "body": {
+          "caller_phone": "{{telnyx_end_user_target}}",
+          "call_id": "{{call_control_id}}"
+        },
+        "body_parameters": {
+          "type": "object",
+          "properties": {
+            "slot_id": {
+              "type": "string",
+              "description": "The option's slot_id from check_availability."
+            },
+            "full_name": {
+              "type": "string",
+              "description": "The patient's full name, confirmed back to them."
+            },
+            "reason": {
+              "type": "string",
+              "description": "Why they're visiting, briefly."
+            },
+            "urgency": {
+              "type": "string",
+              "enum": [
+                "routine",
+                "urgent"
+              ]
+            }
+          },
+          "required": [
+            "slot_id",
+            "full_name"
+          ]
+        }
+      }
+    },
+    {
+      "name": "transfer",
+      "type": "transfer",
+      "transfer": {
+        "from": "${FORGE_NUMBER}",
+        "destination": "${CLINIC_FRONT_DESK_NUMBER}"
+      }
+    },
+    {
+      "name": "hangup",
+      "type": "hangup"
+    }
+  ],
+  "conversation_flow": "@conversation_flow.json"
+}

@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field, fields as dc_fields
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import log
+from .log import log
 from .http import HttpResponse, join_url, quote_key, request
 
 

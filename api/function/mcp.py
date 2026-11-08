@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
-from . import log
+from .log import log
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 
@@ -45,7 +45,7 @@ def _rpc_result(req_id: Any, result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _rpc_error(req_id: Any, code: int, message: str) -> Dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": req_id, "result": None, "error": {"code": code, "message": message}}
+    return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
 
 def _tool_result(data: Dict[str, Any], is_error: bool = False) -> Dict[str, Any]:

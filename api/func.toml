@@ -1,0 +1,35 @@
+# forge-api: Telnyx Edge Function manifest (Python, standard library only).
+# Entry: function/func.py::new() returns an object with an ASGI 3 handle(scope, receive, send).
+# Compare with the file `telnyx-edge new-func forge-api -l python` scaffolds and keep its exact keys.
+name = "forge-api"
+main = "function/func.py"
+runtime = "python"
+
+# Non-secret configuration. Secrets are added with `telnyx-edge secrets add NAME`:
+#   TELNYX_API_KEY, MCP_TOKEN, ADMIN_TOKEN, STATE_TOKEN, STORAGE_SECRET_KEY (optional)
+[env]
+API_URL = "https://forge-api-REPLACE_ORG.telnyxcompute.com"
+STATE_URL = "https://forge-state-REPLACE_ORG.telnyxcompute.com"
+KV_NAMESPACE_ID = "REPLACE_WITH_KV_NAMESPACE_ID"
+TEXML_APP_ID = "REPLACE_WITH_TEXML_APP_ID"
+FORGE_NUMBER = "+1REPLACE"
+ASSISTANT_MODEL = "moonshotai/Kimi-K3"
+POLISH_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+CHAT_MODEL = ""
+LOG_LEVEL = "info"
+VERIFY_SIGNATURES = "false"
+TELNYX_PUBLIC_KEY = ""
+STORAGE_ENDPOINT = "https://us-central-1.telnyxcloudstorage.com"
+STORAGE_BUCKET = "agent-forge"
+STORAGE_REGION = "us-central-1"
+CLINIC_ASSISTANT_ID = ""
+CLINIC_FRONT_DESK_NUMBER = ""
+CLINIC_UTC_OFFSET = "-05:00"
+
+# The Telnyx API key is used as the bearer for KV REST, Assistants, TeXML and Inference.
+[telnyx]
+api_key_secret = "TELNYX_API_KEY"
+
+[edge_compute]
+func_id = "REPLACE_WITH_API_FUNC_ID"
+func_name = "forge-api"

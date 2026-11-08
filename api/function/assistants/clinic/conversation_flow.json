@@ -1,0 +1,545 @@
+{
+  "start_node_id": "welcome",
+  "nodes": [
+    {
+      "id": "welcome",
+      "name": "Welcome & disclosure",
+      "type": "speak",
+      "message": "Thank you for calling Northside Family Clinic. I'm Clara, the clinic's AI assistant. I can help you find the right clinician and book a visit, but I can't give medical advice. If this is an emergency, please hang up and dial 911. This call may be recorded. {{clinic_welcome_line}}"
+    },
+    {
+      "id": "intent",
+      "name": "How can I help?",
+      "type": "prompt",
+      "instructions": "Find out what the caller needs: a new appointment or check-up, to change or cancel an existing appointment (they have {{upcoming_count}} upcoming; the next one is {{next_appointment}}), a question about the clinic, or to talk to a person. Ask one short question and wait for the answer. Do not call any tools in this step.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "symptoms",
+      "name": "Understand the reason for the visit",
+      "type": "prompt",
+      "instructions": "Ask what's going on and for how long, and whether the visit is for them or for a child (if a child, ask the child's age). Never suggest a condition, a cause or a treatment. As soon as you know their reason, call triage_symptoms with their own words. If the result is routine or urgent, read its `say` and `disclaimer` exactly. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "emergency",
+      "name": "Emergency: dial 911",
+      "type": "speak",
+      "message": "What you're describing could be a medical emergency. Please hang up now and dial 911, or go to the nearest emergency room. I can't book this as a regular appointment. If you're not sure, the 911 operator can help you decide."
+    },
+    {
+      "id": "crisis",
+      "name": "Crisis: 988",
+      "type": "speak",
+      "message": "I'm really sorry you're going through this, and I'm glad you reached out. You can call or text 988, the Suicide and Crisis Lifeline, any time, day or night, to talk to someone right now. If you are in immediate danger, please dial 911."
+    },
+    {
+      "id": "urgent_notice",
+      "name": "Urgent: seen within a day or two",
+      "type": "speak",
+      "message": "Because of what you described, you should be seen within a day or two. I'll look for the earliest opening. If things get worse before then, please go to urgent care or dial 911."
+    },
+    {
+      "id": "schedule",
+      "name": "Find a time and book",
+      "type": "prompt",
+      "instructions": "The caller should see {{specialty_label}} ({{matched_specialty}}). Ask which day and time of day suit them, then call check_availability with specialty={{matched_specialty}} (and urgency=urgent if {{triage_urgency}} is urgent). Offer at most two of the `spoken` options. When they pick one, confirm their full name (we have: {{patient_name}}) and the reason for the visit, then call book_appointment with that option's slot_id. If the time was just taken, offer the alternatives it returns. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "booked",
+      "name": "Booking confirmed",
+      "type": "speak",
+      "message": "{{booking_line}} Please arrive 15 minutes early and bring your insurance card and a photo ID. If you need to cancel, call us at least 24 hours ahead."
+    },
+    {
+      "id": "manage",
+      "name": "Change or cancel",
+      "type": "prompt",
+      "instructions": "Call list_my_appointments and read the upcoming ones back briefly. To cancel, confirm which one and then call cancel_appointment. To reschedule, first agree a new time with check_availability, book it with book_appointment, then cancel the old one after they agree. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "faq",
+      "name": "Clinic questions",
+      "type": "prompt",
+      "instructions": "Answer questions about the clinic using get_clinic_info and list_specialists only. Never give medical advice. When the question is answered, offer to book a visit. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "front_desk",
+      "name": "Front desk",
+      "type": "prompt",
+      "instructions": "If {{front_desk_open}} is true, say one short sentence that you're connecting them and use the transfer tool. If the desk is closed or the transfer fails, take a call back instead: ask for their name and the reason, then call request_callback and read its `say`. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions_mode": "append"
+    },
+    {
+      "id": "paused",
+      "name": "Booking paused",
+      "type": "speak",
+      "message": "{{paused_message}}"
+    },
+    {
+      "id": "wrap",
+      "name": "Wrap up",
+      "type": "prompt",
+      "instructions": "Confirm in one sentence what was done and ask if there is anything else. If not, thank them, say goodbye and use the hangup tool.",
+      "instructions_mode": "append"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_welcome",
+      "start_node_id": "welcome",
+      "target": {
+        "type": "node",
+        "node_id": "intent"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_intent_paused",
+      "start_node_id": "intent",
+      "target": {
+        "type": "node",
+        "node_id": "paused"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "booking_enabled"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "false"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_intent_book",
+      "start_node_id": "intent",
+      "target": {
+        "type": "node",
+        "node_id": "symptoms"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants a new appointment, a check-up, or describes symptoms."
+      }
+    },
+    {
+      "id": "e_intent_manage",
+      "start_node_id": "intent",
+      "target": {
+        "type": "node",
+        "node_id": "manage"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants to check, change, reschedule or cancel an existing appointment."
+      }
+    },
+    {
+      "id": "e_intent_faq",
+      "start_node_id": "intent",
+      "target": {
+        "type": "node",
+        "node_id": "faq"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller has a question about the clinic itself, such as hours, address, insurance or parking."
+      }
+    },
+    {
+      "id": "e_intent_desk",
+      "start_node_id": "intent",
+      "target": {
+        "type": "node",
+        "node_id": "front_desk"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller asks for a person, the front desk, a nurse, or their doctor directly."
+      }
+    },
+    {
+      "id": "e_intent_wrap",
+      "start_node_id": "intent",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller has nothing else they need."
+      }
+    },
+    {
+      "id": "e_sym_emergency",
+      "start_node_id": "symptoms",
+      "target": {
+        "type": "node",
+        "node_id": "emergency"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "triage_urgency"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "emergency"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_sym_crisis",
+      "start_node_id": "symptoms",
+      "target": {
+        "type": "node",
+        "node_id": "crisis"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "triage_urgency"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "crisis"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_sym_urgent",
+      "start_node_id": "symptoms",
+      "target": {
+        "type": "node",
+        "node_id": "urgent_notice"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "triage_urgency"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "urgent"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_sym_routine",
+      "start_node_id": "symptoms",
+      "target": {
+        "type": "node",
+        "node_id": "schedule"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "triage_urgency"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "routine"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_sym_desk",
+      "start_node_id": "symptoms",
+      "target": {
+        "type": "node",
+        "node_id": "front_desk"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller refuses to describe their symptoms and wants a person."
+      }
+    },
+    {
+      "id": "e_emergency_wrap",
+      "start_node_id": "emergency",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_crisis_wrap",
+      "start_node_id": "crisis",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_urgent_schedule",
+      "start_node_id": "urgent_notice",
+      "target": {
+        "type": "node",
+        "node_id": "schedule"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_sched_booked",
+      "start_node_id": "schedule",
+      "target": {
+        "type": "node",
+        "node_id": "booked"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "booking_status"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "confirmed"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_sched_paused",
+      "start_node_id": "schedule",
+      "target": {
+        "type": "node",
+        "node_id": "paused"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "booking_status"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "paused"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_sched_timeout",
+      "start_node_id": "schedule",
+      "target": {
+        "type": "node",
+        "node_id": "front_desk"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": ">=",
+          "left": {
+            "type": "variable",
+            "name": "telnyx_conversation_duration_secs"
+          },
+          "right": {
+            "type": "number_literal",
+            "value": 600
+          }
+        }
+      }
+    },
+    {
+      "id": "e_sched_symptoms",
+      "start_node_id": "schedule",
+      "target": {
+        "type": "node",
+        "node_id": "symptoms"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller describes different or new symptoms, or wants a different kind of clinician."
+      }
+    },
+    {
+      "id": "e_sched_desk",
+      "start_node_id": "schedule",
+      "target": {
+        "type": "node",
+        "node_id": "front_desk"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "None of the offered times work and the caller wants a person or a call back."
+      }
+    },
+    {
+      "id": "e_booked_wrap",
+      "start_node_id": "booked",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_manage_booked",
+      "start_node_id": "manage",
+      "target": {
+        "type": "node",
+        "node_id": "booked"
+      },
+      "condition": {
+        "type": "expression",
+        "expression": {
+          "type": "comparison",
+          "op": "==",
+          "left": {
+            "type": "variable",
+            "name": "booking_status"
+          },
+          "right": {
+            "type": "string_literal",
+            "value": "confirmed"
+          }
+        }
+      }
+    },
+    {
+      "id": "e_manage_symptoms",
+      "start_node_id": "manage",
+      "target": {
+        "type": "node",
+        "node_id": "symptoms"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants a new appointment for a new problem."
+      }
+    },
+    {
+      "id": "e_manage_wrap",
+      "start_node_id": "manage",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller is done with their appointments."
+      }
+    },
+    {
+      "id": "e_faq_book",
+      "start_node_id": "faq",
+      "target": {
+        "type": "node",
+        "node_id": "symptoms"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller now wants to book an appointment."
+      }
+    },
+    {
+      "id": "e_faq_desk",
+      "start_node_id": "faq",
+      "target": {
+        "type": "node",
+        "node_id": "front_desk"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller wants to talk to a person."
+      }
+    },
+    {
+      "id": "e_faq_wrap",
+      "start_node_id": "faq",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller's questions are answered and they need nothing else."
+      }
+    },
+    {
+      "id": "e_desk_wrap",
+      "start_node_id": "front_desk",
+      "target": {
+        "type": "node",
+        "node_id": "wrap"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The transfer was started or a call back was requested."
+      }
+    },
+    {
+      "id": "e_paused_desk",
+      "start_node_id": "paused",
+      "target": {
+        "type": "node",
+        "node_id": "front_desk"
+      },
+      "condition": {
+        "type": "default"
+      }
+    },
+    {
+      "id": "e_wrap_intent",
+      "start_node_id": "wrap",
+      "target": {
+        "type": "node",
+        "node_id": "intent"
+      },
+      "condition": {
+        "type": "llm",
+        "prompt": "The caller has another request."
+      }
+    }
+  ]
+}

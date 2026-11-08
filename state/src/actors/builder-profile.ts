@@ -470,7 +470,7 @@ export class BuilderProfile extends StatefulActor {
 
   async snapshot() {
     const s = await this.load()
-    return s
+    return { ok: true, profile: s }
   }
 }
 

@@ -1,0 +1,43 @@
+{
+  "welcome": [],
+  "router": [],
+  "discover": [
+    "list_templates",
+    "save_draft"
+  ],
+  "design": [
+    "save_draft",
+    "get_draft",
+    "list_voices",
+    "check_draft"
+  ],
+  "review": [
+    "get_draft",
+    "save_draft",
+    "check_draft"
+  ],
+  "build": [
+    "build_agent"
+  ],
+  "deliver": [
+    "call_me_with_agent",
+    "list_my_agents"
+  ],
+  "manage": [
+    "list_my_agents",
+    "call_me_with_agent",
+    "list_messages",
+    "delete_agent",
+    "start_new_draft"
+  ],
+  "clinic_handoff": [
+    "handoff"
+  ],
+  "policy_decline": [],
+  "quota_full": [],
+  "paused": [],
+  "build_failed": [],
+  "wrap": [
+    "hangup"
+  ]
+}

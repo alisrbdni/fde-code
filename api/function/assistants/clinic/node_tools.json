@@ -1,0 +1,34 @@
+{
+  "welcome": [],
+  "intent": [],
+  "symptoms": [
+    "triage_symptoms"
+  ],
+  "emergency": [],
+  "crisis": [],
+  "urgent_notice": [],
+  "schedule": [
+    "check_availability",
+    "list_specialists",
+    "book_appointment"
+  ],
+  "booked": [],
+  "manage": [
+    "list_my_appointments",
+    "cancel_appointment",
+    "check_availability",
+    "book_appointment"
+  ],
+  "faq": [
+    "get_clinic_info",
+    "list_specialists"
+  ],
+  "front_desk": [
+    "transfer",
+    "request_callback"
+  ],
+  "paused": [],
+  "wrap": [
+    "hangup"
+  ]
+}

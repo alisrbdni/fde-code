@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent Forge Console</title>
+<style>
+:root{
+  --bg:#f6f7f9;--panel:#fff;--fg:#1c2230;--muted:#5f6878;--line:#e2e5eb;--accent:#0b6bcb;--accent-fg:#fff;
+  --speak:#f4b740;--speak-bg:#fff6e0;--prompt:#3b82f6;--prompt-bg:#e8f0fe;--expr:#1a7f37;--llm:#8250df;--def:#8b93a3;
+  --bad:#c62828;--bad-bg:#fdecea;--ok:#1a7f37;--ok-bg:#e6f4ea;--warn:#9a6700;--warn-bg:#fff4d6;--user:#0b6bcb;--user-fg:#fff;--bot:#eef0f4;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1217;--panel:#171b22;--fg:#e5e8ee;--muted:#9aa3b2;--line:#2a303b;--accent:#58a6ff;--accent-fg:#0b0f14;
+  --speak:#e3a52b;--speak-bg:#2d2412;--prompt:#5b9bff;--prompt-bg:#14223a;--expr:#3fb950;--llm:#b48cff;--def:#6e7685;
+  --bad:#ff7b72;--bad-bg:#3a1513;--ok:#3fb950;--ok-bg:#12261a;--warn:#e3b341;--warn-bg:#2e2510;--user:#1f6feb;--user-fg:#fff;--bot:#222833}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+header h1{font-size:16px;margin:0}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav a{padding:5px 10px;border-radius:6px;color:var(--muted);text-decoration:none}
+nav a.on{background:var(--accent);color:var(--accent-fg)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.chip{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}.chip.bad{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+.chip.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+main{padding:16px;max-width:1500px;margin:0 auto}
+section.tab{display:none}section.tab.on{display:block}
+.grid{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:1000px){.grid.chatflow{grid-template-columns:minmax(0,5fr) minmax(0,7fr)}.grid.two{grid-template-columns:1fr 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
+.card h2{font-size:14px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.muted{color:var(--muted)}.small{font-size:12px}
+input,select,textarea,button{font:inherit;color:inherit}
+input,select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0}
+textarea{width:100%;min-height:60px}
+button{background:var(--accent);color:var(--accent-fg);border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+button.danger{background:var(--bad)}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>input[type=text],.row>input:not([type]){flex:1 1 140px}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:12px}
+.scroll{overflow:auto}
+.transcript{height:460px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px}
+.bubble{max-width:85%;padding:7px 10px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}
+.bubble.user{align-self:flex-end;background:var(--user);color:var(--user-fg)}
+.bubble.assistant{align-self:flex-start;background:var(--bot)}
+.bubble.speak{align-self:flex-start;background:var(--speak-bg);border:1px solid var(--speak)}
+.tag{display:block;font-size:11px;color:var(--muted);margin-bottom:2px}
+.evt{font-size:12px;color:var(--muted);align-self:center;text-align:center}
+.cond{font-size:11px;padding:1px 6px;border-radius:4px;color:#fff}
+.cond.expression{background:var(--expr)}.cond.llm{background:var(--llm)}.cond.default{background:var(--def)}
+details.tool{align-self:stretch;border:1px dashed var(--line);border-radius:8px;padding:4px 8px;font-size:12px}
+details.tool.err{border-color:var(--bad)}
+details.tool pre{margin:4px 0;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto}
+.varchip{display:inline-block;background:var(--ok-bg);color:var(--ok);border-radius:4px;padding:0 5px;margin:2px 4px 0 0;font:12px ui-monospace,monospace}
+.banner{align-self:stretch;text-align:center;background:var(--prompt-bg);border:1px solid var(--prompt);border-radius:8px;padding:6px}
+pre{font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.vars td:first-child{font:12px ui-monospace,monospace;white-space:nowrap}
+.vars tr.changed td{background:var(--warn-bg)}
+.flowwrap{overflow:auto;max-height:640px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+svg text{font:12px system-ui,sans-serif}
+.nodeinfo{margin-top:8px;font-size:13px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
+.tile b{display:block;font-size:22px}
+.subtabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.subtabs button{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.subtabs button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.bar{height:12px;background:var(--prompt);border-radius:3px;min-width:2px}
+.gridcal td{text-align:center;cursor:pointer}.gridcal td.free{background:var(--ok-bg)}.gridcal td.off{color:var(--muted);cursor:default}
+.badge{font-size:11px;border-radius:4px;padding:0 5px;border:1px solid var(--line)}
+.badge.override{background:var(--warn-bg);color:var(--warn)}.badge.env{background:var(--ok-bg);color:var(--ok)}
+.err{color:var(--bad)}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Agent Forge</h1>
+  <nav id="nav">
+    <a href="#forge" data-tab="forge">Forge</a><a href="#agents" data-tab="agents">Agents</a>
+    <a href="#clinic" data-tab="clinic">Clinic</a><a href="#ops" data-tab="ops">Ops</a><a href="#settings" data-tab="settings">Settings</a>
+  </nav>
+  <div class="chips" id="chips"></div>
+</header>
+<main>
+  <div id="authwarn" class="card hidden"><b>Admin token needed.</b> <span class="muted">Paste it in the Settings tab.</span></div>
+
+  <section class="tab" id="tab-forge">
+    <div class="grid chatflow">
+      <div class="grid">
+        <div class="card" id="forge-chat"></div>
+        <div class="card"><h2>Draft</h2><div id="forge-draft" class="small muted">Start a chat to see the draft.</div></div>
+        <div class="card"><h2>Build from a form</h2>
+          <div class="grid two">
+            <input id="fb-phone" placeholder="Owner phone (+1555...)" value="+15550102001">
+            <input id="fb-business" placeholder="Business name" value="Sunrise Dental">
+            <input id="fb-agent" placeholder="Agent name" value="Sam">
+            <select id="fb-template"></select>
+            <select id="fb-voice"><option>warm</option><option>bright</option><option>calm</option><option>professional</option><option>british</option></select>
+            <select id="fb-tone"><option>friendly</option><option>professional</option><option>calm</option><option>upbeat</option><option>formal</option></select>
+            <input id="fb-hours" placeholder="Hours" value="Monday to Friday, 8 AM to 5 PM">
+            <input id="fb-escalation" placeholder="Transfer number (optional)">
+          </div>
+          <textarea id="fb-facts" placeholder="Facts, one per line">We are at 12 Oak Street
+New patient cleanings are 99 dollars</textarea>
+          <div class="row"><button id="fb-go">Build</button><span id="fb-status" class="small muted"></span></div>
+          <div id="fb-steps" class="small"></div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card"><h2>Workflow <span class="small muted" id="forge-flow-meta"></span></h2><div class="flowwrap" id="forge-flow"></div><div class="nodeinfo" id="forge-node"></div></div>
+        <div class="card"><h2>Variables</h2><div class="scroll"><table class="vars" id="forge-vars"></table></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-agents">
+    <div class="card"><h2>Generated agents <button class="ghost" id="agents-refresh">Refresh</button></h2><div class="scroll"><table id="agents-table"></table></div></div>
+    <div class="card hidden" id="agent-detail" style="margin-top:12px">
+      <h2 id="agent-title"></h2>
+      <div class="row" style="margin-bottom:8px"><button id="agent-test">Test call</button><button class="danger" id="agent-delete">Delete</button><span class="small muted" id="agent-msg"></span></div>
+      <div class="subtabs" id="agent-subtabs"></div>
+      <div id="agent-pane"></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-clinic">
+    <div class="grid chatflow">
+      <div class="grid">
+        <div class="card" id="clinic-chat"></div>
+        <div class="card"><h2>Patient</h2><div id="clinic-patient" class="small muted">Start a chat to see the patient.</div></div>
+      </div>
+      <div class="grid">
+        <div class="card"><h2>Workflow</h2><div class="flowwrap" id="clinic-flow"></div><div class="nodeinfo" id="clinic-node"></div></div>
+        <div class="card"><h2>Variables</h2><div class="scroll"><table class="vars" id="clinic-vars"></table></div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px"><h2>Next 7 days <button class="ghost" id="clinic-refresh">Refresh</button> <span class="small muted" id="clinic-flags"></span></h2>
+      <div class="scroll"><table class="gridcal" id="clinic-grid"></table></div><div id="clinic-day" class="small"></div></div>
+    <div class="grid two" style="margin-top:12px">
+      <div class="card"><h2>Triage → availability → book</h2>
+        <div class="row"><input id="ct-symptoms" placeholder="What's going on?" value="my knee hurts when I run"><input id="ct-age" placeholder="Age" style="width:70px"><button id="ct-triage">Triage</button></div>
+        <div id="ct-result" class="small"></div>
+        <div class="row"><input id="ct-phone" placeholder="Patient phone" value="+15550103001"><input id="ct-name" placeholder="Full name" value="Ana Diaz"></div>
+        <div id="ct-options" class="small"></div>
+      </div>
+      <div class="card"><h2>Bookings</h2><div class="scroll"><table id="clinic-bookings"></table></div></div>
+      <div class="card"><h2>Callbacks</h2><div class="scroll"><table id="clinic-callbacks"></table></div></div>
+      <div class="card"><h2>Activity</h2><div class="scroll"><table id="clinic-activity"></table></div></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-ops">
+    <div class="card"><h2>Health <span class="small muted" id="ops-updated"></span></h2><div class="chips" id="ops-health" style="margin:0"></div></div>
+    <div class="tiles" id="ops-tiles" style="margin:12px 0"></div>
+    <div class="grid two">
+      <div class="card"><h2>By route (last <select id="ops-window"><option>5</option><option>15</option><option>60</option><option>120</option></select> min)</h2><div class="scroll"><table id="ops-routes"></table></div></div>
+      <div class="card"><h2>Recent errors and degraded requests</h2><div class="scroll"><table id="ops-errors"></table></div></div>
+      <div class="card"><h2>Forge flags (KV flags/global)</h2><div id="flags-forge"></div></div>
+      <div class="card"><h2>Clinic flags (KV flags/clinic)</h2><div id="flags-clinic"></div></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-settings">
+    <div class="card"><h2>Admin token</h2>
+      <div class="row"><input id="admin-token" type="password" placeholder="ADMIN_TOKEN"><button id="admin-save">Save in this browser</button><span class="small muted">Stored in localStorage; sent as a Bearer token.</span></div>
+    </div>
+    <div class="card" style="margin-top:12px"><h2>Settings overrides <span class="small muted">memory only: lost on restart, never logged or written to KV</span></h2>
+      <div class="scroll"><table id="settings-table"></table></div>
+      <div class="row" style="margin-top:8px"><button id="settings-apply">Apply</button><label class="small"><input type="checkbox" id="settings-remember"> remember in this browser</label><span id="settings-msg" class="small muted"></span></div>
+    </div>
+  </section>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+function h(tag,attrs,...kids){const el=document.createElement(tag);for(const [k,v] of Object.entries(attrs||{})){if(v==null||v===false)continue;if(k==='class')el.className=v;else if(k.startsWith('on'))el.addEventListener(k.slice(2),v);else if(k==='text')el.textContent=v;else el.setAttribute(k,v===true?'':v)}for(const kid of kids.flat()){if(kid==null||kid===false)continue;el.appendChild(typeof kid==='string'||typeof kid==='number'?document.createTextNode(String(kid)):kid)}return el}
+function clear(el){while(el.firstChild)el.removeChild(el.firstChild);return el}
+function fmtTime(ms){if(!ms)return'';const d=new Date(ms);return d.toLocaleString()}
+function json(v){return JSON.stringify(v,null,2)}
+async function api(path,opts){
+  opts=opts||{};const headers={'content-type':'application/json'};const tok=LS.get('adminToken','');if(tok)headers.authorization='Bearer '+tok;
+  const r=await fetch('/ui/api/'+path,{method:opts.body?'POST':'GET',headers,body:opts.body?JSON.stringify(opts.body):undefined});
+  let data=null;try{data=await r.json()}catch(e){}
+  if(r.status===401){$('authwarn').classList.remove('hidden')}
+  if(!r.ok){const e=new Error((data&&data.error)||('HTTP '+r.status));e.status=r.status;throw e}
+  $('authwarn').classList.add('hidden');return data;
+}
+
+/* ---------- tabs ---------- */
+const tabs=['forge','agents','clinic','ops','settings'];let current='forge';const onShow={};
+function show(){current=(location.hash||'#forge').slice(1);if(!tabs.includes(current))current='forge';
+  for(const t of tabs){$('tab-'+t).classList.toggle('on',t===current)}
+  for(const a of document.querySelectorAll('nav a'))a.classList.toggle('on',a.dataset.tab===current);
+  if(onShow[current])onShow[current]();}
+window.addEventListener('hashchange',show);
+
+/* ---------- flow diagram ---------- */
+const NW=170,NH=46,XG=36,YG=70;
+function layoutFlow(flow){
+  const level={},order=[];const start=flow.start_node_id;level[start]=0;const q=[start];
+  const out={};for(const e of flow.edges){(out[e.start_node_id]=out[e.start_node_id]||[]).push(e)}
+  while(q.length){const n=q.shift();order.push(n);for(const e of out[n]||[]){const t=e.target.node_id;if(!(t in level)){level[t]=level[n]+1;q.push(t)}}}
+  for(const n of flow.nodes){if(!(n.id in level)){level[n.id]=Math.max(0,...Object.values(level))+1;order.push(n.id)}}
+  const rows={};for(const id of order){(rows[level[id]]=rows[level[id]]||[]).push(id)}
+  const widest=Math.max(...Object.values(rows).map(r=>r.length));const W=widest*(NW+XG)+XG+120;const pos={};
+  for(const [lv,ids] of Object.entries(rows)){const rowW=ids.length*(NW+XG)-XG;const x0=(W-120-rowW)/2;
+    ids.forEach((id,i)=>{pos[id]={x:x0+i*(NW+XG),y:20+Number(lv)*(NH+YG),lv:Number(lv)}})}
+  const H=20+(Object.keys(rows).length)*(NH+YG);return {pos,W,H};
+}
+function renderFlow(box,flow,state,onPick){
+  const NS='http://www.w3.org/2000/svg';const {pos,W,H}=layoutFlow(flow);clear(box);
+  const svg=document.createElementNS(NS,'svg');svg.setAttribute('width',W);svg.setAttribute('height',H);svg.setAttribute('viewBox','0 0 '+W+' '+H);
+  const css=getComputedStyle(document.documentElement);const col=n=>css.getPropertyValue(n).trim();
+  const mk=(t,a)=>{const el=document.createElementNS(NS,t);for(const[k,v]of Object.entries(a))el.setAttribute(k,v);return el};
+  const defs=mk('defs',{});for(const c of['expr','llm','def']){const m=mk('marker',{id:'arr-'+c,viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto-start-reverse'});m.appendChild(mk('path',{d:'M0,0L10,5L0,10z',fill:col('--'+c)}));defs.appendChild(m)}svg.appendChild(defs);
+  const recent=(state&&state.edges_taken)||[];const visited=new Set((state&&state.visited)||[]);
+  const backCount={};
+  for(const e of flow.edges){const a=pos[e.start_node_id],b=pos[e.target.node_id];if(!a||!b)continue;
+    const kind=(e.condition||{}).type||'default';const c=kind==='expression'?'expr':kind==='llm'?'llm':'def';
+    let d,lx,ly;
+    if(b.lv>a.lv){const x1=a.x+NW/2,y1=a.y+NH,x2=b.x+NW/2,y2=b.y;const my=(y1+y2)/2;d=`M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`;lx=(x1+x2)/2;ly=my}
+    else{const k=(backCount[e.start_node_id]=(backCount[e.start_node_id]||0)+1);const x1=a.x+NW,y1=a.y+NH/2,x2=b.x+NW,y2=b.y+NH/2;const bx=Math.max(x1,x2)+30+k*14;d=`M${x1},${y1} C${bx},${y1} ${bx},${y2} ${x2},${y2}`;lx=bx-8;ly=(y1+y2)/2}
+    const hot=recent.includes(e.id);
+    const p=mk('path',{d,fill:'none',stroke:col('--'+c),'stroke-width':hot?3.5:1.3,'marker-end':'url(#arr-'+c+')'});if(kind==='expression')p.setAttribute('stroke-dasharray','5 3');
+    const t=mk('title',{});t.textContent=e.id+': '+edgeLabel(e);p.appendChild(t);svg.appendChild(p);
+    if(kind==='expression'){const tx=mk('text',{x:lx,y:ly-3,'text-anchor':'middle',fill:col('--expr'),'font-size':10});tx.textContent=edgeLabel(e).replace('telnyx_conversation_duration_secs','duration');svg.appendChild(tx)}}
+  for(const n of flow.nodes){const p=pos[n.id];const speak=n.type==='speak';const cur=state&&state.node===n.id;
+    const g=mk('g',{style:'cursor:pointer'});g.addEventListener('click',()=>onPick&&onPick(n));
+    g.appendChild(mk('rect',{x:p.x,y:p.y,width:NW,height:NH,rx:8,fill:col(speak?'--speak-bg':'--prompt-bg'),stroke:cur?col('--fg'):col(speak?'--speak':'--prompt'),'stroke-width':cur?3:1.2}));
+    const t1=mk('text',{x:p.x+NW/2,y:p.y+18,'text-anchor':'middle',fill:col('--fg'),'font-weight':visited.has(n.id)?700:400});t1.textContent=(n.name||n.id).slice(0,24);g.appendChild(t1);
+    const t2=mk('text',{x:p.x+NW/2,y:p.y+35,'text-anchor':'middle',fill:col('--muted'),'font-size':10});t2.textContent=(speak?'speak · ':'prompt · ')+n.id;g.appendChild(t2);
+    svg.appendChild(g)}
+  box.appendChild(svg);
+}
+function edgeLabel(e){const c=e.condition||{};if(c.type==='expression'){const x=c.expression||{};return (x.left||{}).name+' '+x.op+' '+JSON.stringify((x.right||{}).value)}if(c.type==='llm')return c.prompt;return 'default'}
+function nodeInfo(box,flowData,node){clear(box);const tools=(flowData.node_tools?flowData.node_tools[node.id]:null);
+  box.append(h('b',{},node.name||node.id),' ',h('span',{class:'small muted'},node.type+(node.instructions_mode?' · '+node.instructions_mode:'')));
+  box.append(h('pre',{style:'white-space:pre-wrap'},node.type==='speak'?node.message:node.instructions));
+  box.append(h('div',{class:'small'},'Tools in this node: ',tools==null?'every tool':(tools.length?tools.join(', '):'none')));
+  const outs=flowData.flow.edges.filter(e=>e.start_node_id===node.id);
+  box.append(h('div',{class:'small'},'Outgoing edges:'),h('ul',{class:'small'},outs.map(e=>h('li',{},h('span',{class:'cond '+e.condition.type},e.condition.type),' → '+e.target.node_id+': '+edgeLabel(e)))));
+}
+
+/* ---------- chat component ---------- */
+function createChat(root,opts){
+  const st={session:null,vars:{},prevVars:{},flow:null};
+  const phone=h('input',{value:opts.phone,placeholder:'Caller ID'});
+  const startBtn=h('button',{onclick:()=>start()},'Start call');const hang=h('button',{class:'ghost',onclick:()=>{if(st.session){st.session.ended=true;addEvt('Call ended in the console.');input.disabled=true;send.disabled=true}}},'Hang up');
+  const transcript=h('div',{class:'transcript'});const input=h('input',{placeholder:'Say something...',disabled:true,onkeydown:e=>{if(e.key==='Enter')go()}});
+  const send=h('button',{disabled:true,onclick:()=>go()},'Send');const status=h('span',{class:'small muted'});
+  root.append(h('h2',{},opts.title,status),h('div',{class:'row'},phone,startBtn,hang),transcript,h('div',{class:'row',style:'margin-top:6px'},input,send));
+  function addEvt(t){transcript.appendChild(h('div',{class:'evt'},t))}
+  function render(events){for(const ev of events){let el=null;
+    if(ev.type==='user')el=h('div',{class:'bubble user'},ev.text);
+    else if(ev.type==='assistant')el=h('div',{class:'bubble assistant'},ev.text);
+    else if(ev.type==='speak')el=h('div',{class:'bubble speak'},h('span',{class:'tag'},'speak node · '+(ev.node_name||ev.node)),ev.text);
+    else if(ev.type==='transition')el=h('div',{class:'evt'},ev.frm+' → '+ev.to+' ',h('span',{class:'cond '+ev.condition,title:ev.label},ev.condition==='llm'?'llm':ev.condition==='expression'?ev.label:'default'));
+    else if(ev.type==='tool'){el=h('details',{class:'tool'+(ev.error?' err':'')},h('summary',{},'🔧 '+ev.name+' ',h('span',{class:'muted'},'('+ev.kind+', '+ev.ms+' ms)'),ev.error?h('span',{class:'err'},' '+ev.error):null,Object.entries(ev.vars_set||{}).map(([k,v])=>h('span',{class:'varchip'},k+'='+v))),h('pre',{},'args '+json(ev.args)),ev.result?h('pre',{},'result '+json(ev.result)):null)}
+    else if(ev.type==='variables')el=h('div',{class:'evt'},'variables loaded for '+ev.assistant+' ('+Object.keys(ev.values||{}).length+')');
+    else if(ev.type==='handoff')el=h('div',{class:'banner'},'Handed off from '+ev.frm+' to '+ev.name);
+    else if(ev.type==='end')el=h('div',{class:'evt'},'— call ended ('+ev.reason+') —');
+    else if(ev.type==='system')el=h('div',{class:'evt err'},ev.text);
+    if(el)transcript.appendChild(el)}
+    transcript.scrollTop=transcript.scrollHeight}
+  async function update(data){st.prevVars=st.session?st.session.vars:{};st.session=data.session;render(data.events||[]);
+    const ended=st.session.ended;input.disabled=ended;send.disabled=ended;status.textContent=' '+st.session.assistant_name+' · '+(st.session.node_name||st.session.node)+(ended?' · ended':'');
+    if(!st.flow||st.flow.id!==st.session.assistant){st.flow=await api('flow/'+st.session.assistant)}
+    opts.onUpdate&&opts.onUpdate(st)}
+  async function start(){clear(transcript);st.session=null;startBtn.disabled=true;try{await update(await api('chat/start',{body:{assistant:opts.assistant(),phone:phone.value}}));input.focus()}catch(e){addEvt('Error: '+e.message)}finally{startBtn.disabled=false}}
+  async function go(){const text=input.value.trim();if(!text||!st.session)return;input.value='';send.disabled=true;
+    try{await update(await api('chat/send',{body:{session_id:st.session.id,text}}))}catch(e){addEvt('Error: '+e.message);send.disabled=false}}
+  return st;
+}
+function renderVars(table,st){clear(table);table.append(h('tr',{},h('th',{},'variable'),h('th',{},'value')));
+  const v=st.session?st.session.vars:{};for(const k of Object.keys(v).sort()){const changed=st.prevVars&&k in st.prevVars&&st.prevVars[k]!==v[k];table.append(h('tr',{class:changed?'changed':''},h('td',{},k),h('td',{},String(v[k]))))}}
+function kv(obj){return h('table',{},Object.entries(obj||{}).map(([k,v])=>h('tr',{},h('td',{class:'muted'},k),h('td',{},Array.isArray(v)?v.join('; '):typeof v==='object'&&v?JSON.stringify(v):String(v)))))}
+
+/* ---------- Forge tab ---------- */
+let forgeFlow=null;
+const forgeChat=createChat($('forge-chat'),{title:'Talk to Forge',phone:'+15550102001',assistant:()=>'forge',onUpdate:st=>{
+  forgeFlow=st.flow;renderFlow($('forge-flow'),st.flow.flow,st.session,n=>nodeInfo($('forge-node'),st.flow,n));renderVars($('forge-vars'),st);
+  const d=st.session.draft;clear($('forge-draft'));if(d&&Object.keys(d).length)$('forge-draft').append(kv(d));else $('forge-draft').textContent='Empty draft.'}});
+async function loadForgeFlow(){if(forgeFlow)return;try{forgeFlow=await api('flow/forge');renderFlow($('forge-flow'),forgeFlow.flow,null,n=>nodeInfo($('forge-node'),forgeFlow,n));$('forge-flow-meta').textContent=forgeFlow.flow.nodes.length+' nodes · '+forgeFlow.flow.edges.length+' edges'}catch(e){}}
+for(const t of['receptionist','appointments','faq','restaurant','events','lead_intake'])$('fb-template').append(h('option',{},t));
+$('fb-go').onclick=async()=>{$('fb-status').textContent='building...';clear($('fb-steps'));
+  const fields={business_name:$('fb-business').value,agent_name:$('fb-agent').value,template:$('fb-template').value,voice:$('fb-voice').value,tone:$('fb-tone').value,hours:$('fb-hours').value,facts:$('fb-facts').value.split('\n').map(s=>s.trim()).filter(Boolean)};
+  if($('fb-escalation').value.trim())fields.escalation_number=$('fb-escalation').value.trim();
+  try{const r=await api('forge/build',{body:{phone:$('fb-phone').value,fields}});$('fb-status').textContent=(r.result&&(r.result.build_status||r.result.message))||'done';
+    $('fb-steps').append(h('table',{},r.steps.map(s=>h('tr',{},h('td',{},s.step),h('td',{},s.ok?'ok':'failed'),h('td',{},s.ms+' ms'),h('td',{},h('details',{},h('summary',{},'result'),h('pre',{},json(s.result||s.error))))))));
+    $('fb-steps').append(spanBars(r.spans))}catch(e){$('fb-status').textContent='Error: '+e.message}};
+function spanBars(spans){const max=Math.max(1,...(spans||[]).map(s=>s.ms||0));return h('table',{},(spans||[]).map(s=>h('tr',{},h('td',{class:'small'},s.name),h('td',{style:'width:55%'},h('div',{class:'bar',style:'width:'+Math.max(1,100*(s.ms||0)/max)+'%;'+(s.ok?'':'background:var(--bad)')})),h('td',{class:'small'},s.ms+' ms'))))}
+onShow.forge=loadForgeFlow;
+
+/* ---------- Agents tab ---------- */
+let agentKey=null,agentData=null,agentSub='Overview',agentChat=null;
+async function loadAgents(){try{const r=await api('agents');const t=clear($('agents-table'));
+  t.append(h('tr',{},['Agent','Business','Owner','Level','Status','Builds','Source','Expires'].map(x=>h('th',{},x))));
+  for(const a of r.agents)t.append(h('tr',{style:'cursor:pointer',onclick:()=>openAgent(a.key)},h('td',{},a.name||a.key,h('div',{class:'small muted'},a.key)),h('td',{},a.business),h('td',{},a.owner),h('td',{},a.level),h('td',{},a.status),h('td',{},a.builds),h('td',{},a.source),h('td',{},fmtTime(a.expiresAt))));
+  if(!r.agents.length)t.append(h('tr',{},h('td',{colspan:8,class:'muted'},'No agents yet. Build one in the Forge tab.')))}catch(e){}}
+async function openAgent(key){agentKey=key;agentData=await api('agents/'+key);$('agent-detail').classList.remove('hidden');$('agent-title').textContent=(agentData.registry.name||key)+' · '+agentData.registry.status;renderAgentTabs()}
+function renderAgentTabs(){const subs=['Overview','Input','Generated','Flow','Build trace','Messages','Chat','Raw'];const box=clear($('agent-subtabs'));
+  for(const s of subs)box.append(h('button',{class:s===agentSub?'on':'',onclick:()=>{agentSub=s;renderAgentTabs()}},s));
+  const pane=clear($('agent-pane'));const a=agentData,arc=a.archive||{};
+  if(agentSub==='Overview')pane.append(kv({key:a.registry.key,assistant_id:a.registry.assistantId,owner:a.registry.owner,level:a.registry.level,status:a.registry.status,builds:a.registry.builds,source:a.registry.source,created:fmtTime(a.registry.createdAt),expires:fmtTime(a.registry.expiresAt),last_trace:a.registry.lastTraceId,versions:(a.versions||[]).join(', '),pending_jobs:(a.jobs||[]).map(j=>j.type+' @ '+fmtTime(j.at)).join('; ')||'none'}));
+  else if(agentSub==='Input')pane.append(kv(arc.input||{}));
+  else if(agentSub==='Generated')pane.append(kv({persona_source:arc.persona_source,persona:arc.persona,greeting:arc.greeting,feature_level:arc.feature_level,ladder_warnings:(arc.ladder_warnings||[]).join('; ')||'none'}),h('pre',{style:'white-space:pre-wrap'},(arc.payload||{}).instructions||''));
+  else if(agentSub==='Flow'){const flow=(arc.payload||{}).conversation_flow;if(flow){const box2=h('div',{class:'flowwrap'});pane.append(box2);renderFlow(box2,flow,null,null)}else pane.append(h('div',{class:'muted'},'No workflow at this feature level.'))}
+  else if(agentSub==='Build trace')pane.append(spanBars(arc.spans));
+  else if(agentSub==='Messages')pane.append(h('table',{},h('tr',{},['When','From','Callback','Message','Read'].map(x=>h('th',{},x))),(a.messages||[]).map(m=>h('tr',{},h('td',{},fmtTime(m.at)),h('td',{},m.caller_name),h('td',{},m.callback_number),h('td',{},m.message),h('td',{},m.read?'yes':'no')))));
+  else if(agentSub==='Chat'){const c=h('div',{});pane.append(c);createChat(c,{title:'Call '+(a.registry.name||agentKey),phone:'+15550102002',assistant:()=>agentKey})}
+  else pane.append(h('pre',{style:'white-space:pre-wrap'},json(a)))}
+$('agents-refresh').onclick=loadAgents;
+$('agent-test').onclick=async()=>{try{const r=await api('agents/'+agentKey+'/test-call',{body:{}});$('agent-msg').textContent='Test call in '+r.delay_secs+' s'}catch(e){$('agent-msg').textContent=e.message}};
+$('agent-delete').onclick=async()=>{if(!confirm('Delete this agent now?'))return;try{await api('agents/'+agentKey+'/delete',{body:{}});$('agent-msg').textContent='Deleting...';setTimeout(()=>{openAgent(agentKey);loadAgents()},1500)}catch(e){$('agent-msg').textContent=e.message}};
+onShow.agents=loadAgents;
+
+/* ---------- Clinic tab ---------- */
+let clinicFlow=null,clinicData=null;
+createChat($('clinic-chat'),{title:'Talk to Clara',phone:'+15550103001',assistant:()=>'clinic',onUpdate:st=>{
+  clinicFlow=st.flow;renderFlow($('clinic-flow'),st.flow.flow,st.session,n=>nodeInfo($('clinic-node'),st.flow,n));renderVars($('clinic-vars'),st);
+  const p=st.session.patient;const box=clear($('clinic-patient'));if(p){box.append(kv({phone:p.phone,name:p.name,calls:p.calls,last_triage:p.lastTriage?p.lastTriage.urgency+' / '+p.lastTriage.specialty:''}));
+    box.append(h('table',{},(p.appointments||[]).map(x=>h('tr',{},h('td',{},x.spoken||x.slot),h('td',{},x.status)))))}
+  if(st.session.vars.booking_status==='confirmed')loadClinic()}});
+async function loadClinicFlow(){if(clinicFlow)return;try{clinicFlow=await api('flow/clinic');renderFlow($('clinic-flow'),clinicFlow.flow,null,n=>nodeInfo($('clinic-node'),clinicFlow,n))}catch(e){}}
+const dayKey=d=>d.toISOString().slice(0,10);
+async function loadClinic(){try{clinicData=await api('clinic');const d=clinicData;
+  $('clinic-flags').textContent='bookings '+(d.flags.bookings_enabled?'on':'paused')+' · window '+d.flags.booking_window_days+' d · notice '+d.flags.min_notice_minutes+' min · desk '+(d.desk_open?'open':'closed');
+  const base=new Date(d.today.slice(0,10)+'T00:00:00Z');const days=[];for(let i=0;i<7;i++){const x=new Date(base.getTime()+i*86400000);days.push(dayKey(x))}
+  const t=clear($('clinic-grid'));t.append(h('tr',{},h('th',{},'Clinician'),days.map(x=>h('th',{},new Date(x+'T00:00:00Z').toLocaleDateString(undefined,{weekday:'short',day:'numeric',timeZone:'UTC'})))));
+  for(const c of d.clinicians){t.append(h('tr',{},h('td',{style:'text-align:left;cursor:default'},c.name,h('div',{class:'small muted'},c.specialty)),days.map(x=>{const free=c.free_slots.filter(s=>s.startsWith(x)).length;const booked=c.bookings.filter(b=>String(b.slot).startsWith(x)).length;
+    if(!free&&!booked)return h('td',{class:'off'},'—');return h('td',{class:free?'free':'',onclick:()=>showDay(c,x)},free+' free'+(booked?' · '+booked+' booked':''))})))}
+  const bt=clear($('clinic-bookings'));bt.append(h('tr',{},['When','Clinician','Patient','Urgency','Source',''].map(x=>h('th',{},x))));
+  for(const c of d.clinicians)for(const b of c.bookings)bt.append(h('tr',{},h('td',{},b.slot),h('td',{},c.name),h('td',{},(b.patient_name||'')+' '+b.patient),h('td',{},b.urgency),h('td',{},b.source),h('td',{},h('button',{class:'ghost',onclick:async()=>{await api('clinic/cancel',{body:{specialist_id:c.id,appointment_id:b.id}});loadClinic()}},'Cancel'))));
+  const cb=clear($('clinic-callbacks'));cb.append(h('tr',{},['When','Phone','Name','Reason',''].map(x=>h('th',{},x))));
+  for(const c of d.desk.callbacks)cb.append(h('tr',{},h('td',{},fmtTime(c.at)),h('td',{},c.phone),h('td',{},c.name),h('td',{},c.reason),h('td',{},c.done?'done':h('button',{class:'ghost',onclick:async()=>{await api('clinic/callback-done',{body:{id:c.id}});loadClinic()}},'Done'))));
+  const ac=clear($('clinic-activity'));for(const a of d.desk.activity.slice(0,40))ac.append(h('tr',{},h('td',{},fmtTime(a.at)),h('td',{},a.event),h('td',{class:'small muted'},[a.specialist,a.slot,a.patient,a.urgency].filter(Boolean).join(' · '))))}catch(e){}}
+function showDay(c,day){const box=clear($('clinic-day'));box.append(h('b',{},c.name+' · '+day+': '));
+  box.append(...c.free_slots.filter(s=>s.startsWith(day)).map(s=>h('span',{class:'varchip'},s.slice(11))));
+  for(const b of c.bookings.filter(b=>String(b.slot).startsWith(day)))box.append(h('span',{class:'chip bad'},String(b.slot).slice(11)+' booked'))}
+$('clinic-refresh').onclick=loadClinic;
+$('ct-triage').onclick=async()=>{const r=await api('clinic/triage',{body:{symptoms:$('ct-symptoms').value,age:$('ct-age').value||null}});
+  clear($('ct-result')).append(kv({urgency:r.urgency,specialty:r.specialty_label+' ('+r.specialty+')',source:r.source,matched:r.matched_terms.join(', '),say:r.say}));clear($('ct-options'));
+  if(r.urgency==='emergency'||r.urgency==='crisis'){$('ct-options').append(h('div',{class:'err'},'Not bookable: the workflow routes to the '+r.urgency+' speak node.'));return}
+  const av=await api('clinic/availability',{body:{specialty:r.specialty,urgency:r.urgency}});
+  $('ct-options').append(h('div',{},av.say),...av.options.map(o=>h('div',{class:'row'},h('span',{},o.spoken),h('button',{class:'ghost',onclick:async()=>{const b=await api('clinic/book',{body:{phone:$('ct-phone').value,full_name:$('ct-name').value,slot_id:o.slot_id,reason:$('ct-symptoms').value,urgency:r.urgency}});clear($('ct-options')).append(h('div',{},b.booking_status+': '+(b.message||'')));loadClinic()}},'Book'))))};
+onShow.clinic=()=>{loadClinicFlow();loadClinic()};
+
+/* ---------- Ops tab ---------- */
+let opsTimer=null;
+async function loadOps(){try{
+  const r=await fetch('/ops/health');const hl=await r.json();const box=clear($('ops-health'));
+  box.append(h('span',{class:'chip '+(hl.ok?'ok':'bad')},hl.ok?'healthy':'UNHEALTHY'));
+  for(const [k,v] of Object.entries(hl.checks||{}))box.append(h('span',{class:'chip '+(v.ok?'ok':(v.affects_health===false?'warn':'bad'))},k+': '+(v.mode||'')+(v.ok?'':' ✕ '+(v.error||''))));
+  const m=await opsMetricsDirect();if(m.error)throw new Error(m.error);
+  const tiles=clear($('ops-tiles'));const tile=(l,v)=>tiles.append(h('div',{class:'tile'},h('span',{class:'small muted'},l),h('b',{},String(v))));
+  tile('Requests',m.requests);tile('Errors',m.errors);tile('Error rate',(100*m.error_rate).toFixed(1)+'%');tile('p50',m.latency_p50_ms+' ms');tile('p95',m.latency_p95_ms+' ms');
+  const rt=clear($('ops-routes'));rt.append(h('tr',{},['Route','Count','Errors','Degraded'].map(x=>h('th',{},x))));
+  for(const [k,v] of Object.entries(m.by_route).sort((a,b)=>b[1].count-a[1].count))rt.append(h('tr',{},h('td',{},k),h('td',{},v.count),h('td',{class:v.errors?'err':''},v.errors),h('td',{},v.degraded)));
+  const et=clear($('ops-errors'));et.append(h('tr',{},['When','Route','Outcome','Trace','Error'].map(x=>h('th',{},x))));
+  for(const e of m.recent_errors)et.append(h('tr',{},h('td',{},fmtTime(e.at)),h('td',{},e.route),h('td',{},e.outcome),h('td',{class:'small'},e.trace_id),h('td',{class:'small'},e.error||'')));
+  $('ops-updated').textContent='updated '+new Date().toLocaleTimeString()}catch(e){$('ops-updated').textContent='error: '+e.message}}
+async function opsMetricsDirect(){const tok=LS.get('adminToken','');const r=await fetch('/ops/metrics?window='+$('ops-window').value,{headers:tok?{authorization:'Bearer '+tok}:{}});return r.json()}
+async function loadFlags(){for(const scope of['forge','clinic']){try{const r=await api('flags/'+scope);const box=clear($('flags-'+scope));const inputs={};
+  for(const [k,v] of Object.entries(r.flags)){let inp;if(typeof v==='boolean'){inp=h('input',{type:'checkbox'});inp.checked=v}else if(typeof v==='number')inp=h('input',{type:'number',value:v,style:'width:90px'});else inp=h('input',{value:v,style:'width:100%'});inputs[k]=inp;box.append(h('div',{class:'row small'},h('label',{style:'min-width:210px'},k),inp))}
+  box.append(h('div',{class:'row'},h('button',{onclick:async()=>{const patch={};for(const[k,inp]of Object.entries(inputs))patch[k]=inp.type==='checkbox'?inp.checked:inp.type==='number'?Number(inp.value):inp.value;await api('flags/'+scope,{body:patch});loadFlags()}},'Save'),h('span',{class:'small muted'},'source: '+r.source)))}catch(e){}}}
+$('ops-window').onchange=loadOps;
+onShow.ops=()=>{loadOps();loadFlags()};
+setInterval(()=>{if(current==='ops'&&!document.hidden)loadOps()},5000);
+
+/* ---------- Settings tab ---------- */
+let settingsInputs={};
+async function loadSettings(){try{const r=await api('settings');const t=clear($('settings-table'));settingsInputs={};
+  t.append(h('tr',{},['Setting','Current','Source','Override'].map(x=>h('th',{},x))));
+  for(const s of r.settings){const inp=h('input',{type:s.secret?'password':'text',placeholder:s.secret?'(secret)':'',style:'width:100%'});settingsInputs[s.name]=inp;
+    t.append(h('tr',{},h('td',{},h('code',{},s.name),h('div',{class:'small muted'},s.label)),h('td',{class:'small'},s.value||h('span',{class:'muted'},'unset')),h('td',{},h('span',{class:'badge '+s.source},s.source)),h('td',{},inp,s.source==='override'?h('button',{class:'ghost small',onclick:()=>applySettings({[s.name]:null})},'clear'):null)))}
+  $('settings-remember').checked=!!LS.get('rememberOverrides','');
+  if(!r.overrides.length&&LS.get('rememberOverrides','')){const saved=JSON.parse(LS.get('savedOverrides','{}')||'{}');if(Object.keys(saved).length){await applySettings(saved,true);$('settings-msg').textContent='Re-applied overrides remembered in this browser.'}}
+  return r}catch(e){$('settings-msg').textContent=e.message}}
+async function applySettings(values,quiet){try{await api('settings',{body:{values}});
+  if($('settings-remember').checked){const saved=JSON.parse(LS.get('savedOverrides','{}')||'{}');for(const[k,v]of Object.entries(values)){if(v==null)delete saved[k];else saved[k]=v}LS.set('savedOverrides',JSON.stringify(saved));LS.set('rememberOverrides','1')}
+  if(!quiet)$('settings-msg').textContent='Applied.';await loadSettings();loadOverview()}catch(e){$('settings-msg').textContent='Error: '+e.message}}
+$('settings-apply').onclick=()=>{const values={};for(const[k,inp]of Object.entries(settingsInputs))if(inp.value.trim())values[k]=inp.value.trim();applySettings(values)};
+$('settings-remember').onchange=e=>{if(!e.target.checked){LS.del('rememberOverrides');LS.del('savedOverrides')}};
+$('admin-token').value=LS.get('adminToken','');
+$('admin-save').onclick=()=>{LS.set('adminToken',$('admin-token').value.trim());loadOverview();show()};
+onShow.settings=loadSettings;
+
+/* ---------- header chips ---------- */
+async function loadOverview(){try{const o=await api('overview');const box=clear($('chips'));const m=o.mode;
+  const chip=(t,cls)=>box.append(h('span',{class:'chip '+(cls||'')},t));
+  chip('API: '+m.telnyx_api,m.telnyx_api==='live'?'ok':'warn');chip('LLM: '+m.llm,m.llm==='stub'?'warn':'ok');chip('KV: '+m.kv);chip('actors: '+m.actors);chip('storage: '+m.storage);
+  chip('test calls: '+(m.texml?'on':'off'),m.texml?'ok':'warn');chip('handoff: '+(m.clinic_handoff?'on':'off'));if(o.overrides.length)chip(o.overrides.length+' override(s)','warn')}catch(e){}}
+loadOverview();show();
+</script>
+</body>
+</html>

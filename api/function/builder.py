@@ -14,7 +14,8 @@ import secrets
 import time
 from typing import Any, Dict, List, Tuple
 
-from . import generator, log
+from . import generator
+from .log import log
 from .config import mask_phone
 from .drafts import assess
 from .state import StateError
@@ -267,10 +268,14 @@ async def create_with_ladder(
             if exc.is_retryable and not retried:
                 retried = True
                 warnings.append(f"transient {exc.status} at level {level}; retried")
+                log("warn", "build.ladder_step", agent_key=key, feature_level=level, status=exc.status,
+                    action="retry", trace_id=trace.trace_id)
                 continue
             if exc.is_validation and idx + 1 < len(levels):
                 nxt = levels[idx + 1]
                 warnings.append(f"level {level} rejected ({exc.status}); dropped to {nxt}")
+                log("warn", "build.ladder_step", agent_key=key, feature_level=level, status=exc.status,
+                    action=f"drop_to_{nxt}", detail=str(exc.body)[:200], trace_id=trace.trace_id)
                 idx += 1
                 continue
             raise
@@ -338,9 +343,10 @@ async def _expire_local(app: Any, trace: Any, job: Dict[str, Any]) -> None:
         log("warn", "registry.set_status_failed", agent_key=key, error=str(exc)[:160])
 
 
-async def run_due_jobs(app: Any, trace: Any, owner: str) -> Dict[str, Any]:
-    """The local alarm: take due jobs, run them, apply results, record ops."""
-    now = _ms()
+async def run_due_jobs(app: Any, trace: Any, owner: str, now: int = 0) -> Dict[str, Any]:
+    """The local alarm: take due jobs, run them, apply results, record ops.
+    `now` lets tests jump the clock forward (defaults to the wall clock)."""
+    now = now or _ms()
     async with trace.span("actor builder.takeDueJobs"):
         due = await app.state.call("builder", owner, "takeDueJobs", now, trace_id=trace.trace_id)
     if not due:
@@ -348,7 +354,7 @@ async def run_due_jobs(app: Any, trace: Any, owner: str) -> Dict[str, Any]:
     results = await run_jobs(app, trace, due)
     async with trace.span("actor builder.applyJobResults"):
         await app.state.call(
-            "builder", owner, "applyJobResults", due, results, _ms(), trace_id=trace.trace_id
+            "builder", owner, "applyJobResults", due, results, now, trace_id=trace.trace_id
         )
     outcome = "ok" if all(r.get("ok") for r in results) else "error"
     try:
@@ -372,7 +378,7 @@ async def record_build(app: Any, trace: Any, **info: Any) -> None:
     try:
         from .storage import redact_payload
     except Exception:
-        async def redact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+        def redact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             return copy.deepcopy(payload)
 
     try:

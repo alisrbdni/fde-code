@@ -75,7 +75,6 @@ async def request(
     if isinstance(body, (dict, list)):
         hdrs.setdefault("content-type", "application/json")
     data, _ = _encode_body(body, content_type)
-    loop = asyncio.get_running_loop()
 
     def run() -> HttpResponse:
         return _do_request(method.upper(), url, hdrs, data)

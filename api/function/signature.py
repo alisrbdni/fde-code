@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 from typing import Optional
 
-from . import log
+from .log import log
 
 available = False
 try:  # optional at runtime

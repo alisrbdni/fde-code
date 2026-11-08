@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .catalog import TEMPLATES, VOICES
 from .drafts import _clean
 from .kv import cached
+from .log import log
 from .policy import check as policy_check
 
 SAFETY = (
@@ -110,7 +111,8 @@ async def polish(app: Any, trace: Any, fields: Dict[str, Any], flags: Any) -> Tu
 
     try:
         data, hit = await cached(app.kv, trace, f"cache/polish/{spec_hash}", POLISH_TTL, load)
-    except Exception:
+    except Exception as exc:
+        log("warn", "polish.failed", reason="inference_error", error=str(exc)[:160], trace_id=trace.trace_id)
         return fallback
     if not isinstance(data, dict):
         return fallback
@@ -127,6 +129,7 @@ async def polish(app: Any, trace: Any, fields: Dict[str, Any], flags: Any) -> Tu
         }
     )
     if not verdict.allowed:
+        log("warn", "polish.failed", reason="policy_blocked", trace_id=trace.trace_id)
         return fallback
     return persona, greeting, ("llm_cache" if hit else "llm")
 
@@ -292,12 +295,17 @@ def build_tools(fields: Dict[str, Any], key: str, settings: Any) -> List[Dict[st
             "webhook": {
                 "url": f"{settings.public_api_url}/agents/{key}/tools/take-message",
                 "method": "POST",
+                "description": "Save the caller's message for the owner, with their name and callback number.",
                 "headers": {"Authorization": f"Bearer {agent_token(settings.mcp_token, key)}"},
-                "body": {
-                    "caller_name": "{{caller_name}}",
-                    "callback_number": "{{callback_number}}",
-                    "message": "{{message}}",
-                    "call_id": "{{call_control_id}}",
+                "body": {"call_id": "{{call_control_id}}"},
+                "body_parameters": {
+                    "type": "object",
+                    "properties": {
+                        "caller_name": {"type": "string", "description": "The caller's name."},
+                        "callback_number": {"type": "string", "description": "The number to call them back on."},
+                        "message": {"type": "string", "description": "The message, in the caller's words."},
+                    },
+                    "required": ["message"],
                 },
             },
         },

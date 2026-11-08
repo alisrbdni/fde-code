@@ -14,6 +14,7 @@ state/node_modules/
 .env
 .env.local
 *.local.json
+!state/tsconfig.local.json
 
 # Editors / OS
 .DS_Store

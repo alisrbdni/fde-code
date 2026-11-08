@@ -1,0 +1,85 @@
+{
+  "name": "Forge",
+  "model": "${ASSISTANT_MODEL}",
+  "instructions": "You are Forge, a voice assistant that builds voice AI agents for callers on the Telnyx platform. You interview the caller about their business, save their answers, build a real agent, and arrange a test call. This is a phone call: use short sentences, ask one question at a time, never read lists or symbols, and confirm what you heard. Save every detail with save_draft as soon as you hear it. Never promise features you don't have. You only build agents for the caller's own business or project; you never build agents that impersonate real organisations, collect payment or ID numbers, hide that they are an AI, or pressure people. The current time is {{telnyx_current_time}}.",
+  "greeting": "",
+  "dynamic_variables_webhook_url": "${API_URL}/webhook/dynamic-variables",
+  "dynamic_variables_webhook_timeout_ms": 3000,
+  "dynamic_variables": {
+    "welcome_line": "Tell me about the business or project you want an agent for, and I'll build it while we talk.",
+    "caller_phone": "",
+    "caller_id_verified": "false",
+    "returning_builder": "false",
+    "call_count": "1",
+    "has_draft": "false",
+    "draft_business": "",
+    "active_agents": "0",
+    "last_agent_name": "",
+    "unread_messages": "0",
+    "max_agents": "3",
+    "quota_remaining": "3",
+    "builds_enabled": "true",
+    "maintenance_message": "",
+    "agent_ttl_hours": "24",
+    "draft_complete": "false",
+    "build_status": "none",
+    "built_agent_name": "",
+    "degraded": "false",
+    "trace_id": ""
+  },
+  "telephony": {
+    "time_limit_secs": 1200,
+    "user_idle_timeout_secs": 60,
+    "default_texml_app_id": "${TEXML_APP_ID}"
+  },
+  "tools": [
+    {
+      "name": "check_draft",
+      "type": "webhook",
+      "webhook": {
+        "url": "${API_URL}/tools/check-draft",
+        "method": "POST",
+        "headers": {
+          "Authorization": "Bearer ${MCP_TOKEN}"
+        },
+        "body": {
+          "caller_phone": "{{telnyx_end_user_target}}",
+          "call_id": "{{call_control_id}}"
+        }
+      }
+    },
+    {
+      "name": "build_agent",
+      "type": "webhook",
+      "webhook": {
+        "url": "${API_URL}/tools/build-agent",
+        "method": "POST",
+        "headers": {
+          "Authorization": "Bearer ${MCP_TOKEN}"
+        },
+        "body": {
+          "caller_phone": "{{telnyx_end_user_target}}",
+          "call_id": "{{call_control_id}}"
+        }
+      }
+    },
+    {
+      "name": "handoff",
+      "type": "handoff",
+      "handoff": {
+        "ai_assistants": [
+          {
+            "id": "${CLINIC_ASSISTANT_ID}",
+            "name": "Clara"
+          }
+        ],
+        "voice_mode": "distinct"
+      }
+    },
+    {
+      "name": "hangup",
+      "type": "hangup"
+    }
+  ],
+  "conversation_flow": "@conversation_flow.json"
+}

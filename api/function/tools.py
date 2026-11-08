@@ -149,7 +149,7 @@ async def get_draft(app, trace, args) -> Dict[str, Any]:
 
 async def start_new_draft(app, trace, args) -> Dict[str, Any]:
     owner = await _owner(app, trace, args)
-    result = await app.state.call("builder", owner, "resetDraft", _now_ms(), trace_id=trace.trace_id)
+    await app.state.call("builder", owner, "resetDraft", _now_ms(), trace_id=trace.trace_id)
     return {
         "ok": True,
         "say": "OK, I've cleared your draft. Tell me about the business you want an agent for.",
