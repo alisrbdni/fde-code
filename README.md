@@ -51,7 +51,7 @@ emails you. A ship also replaces the running containers, so expect a brief blip 
 ### Getting a phone number
 The functions are deployed, but the Telnyx account has no phone numbers yet (a number is bought, it doesn't come
 free), so the phone flows can't be called. Until then, everything below works in the console. To enable calling:
-1. **Add credit:** Portal → **Billing** (the challenge promo code `TELNYXFDE2026`, or a few dollars; a number is
+1. **Add credit:** Portal → **Billing** (use promo code , or a few dollars; a number is
    about $1–2 a month).
 2. **Buy numbers:** Portal → **Numbers → Search & Buy**: one for Forge, one for Clara, and one that generated
    agents call owners back from. Pick the country your testers are in to avoid international call charges.
