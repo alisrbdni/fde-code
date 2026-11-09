@@ -28,6 +28,7 @@ from .storage import MemoryStorage, make_storage
 from .telnyx_api import FakeTelnyx, TelnyxClient
 
 MAX_BODY = 256 * 1024
+KV_PROBE_SECS = 30.0
 UNMETERED_ROUTES = {"health", "ops", "ops_health", "console", "docs"}
 AGENT_ROUTE = re.compile(r"^/agents/(ag[0-9a-f]{8})/(dynamic-variables|tools/take-message)$")
 
@@ -502,16 +503,22 @@ class Function:
     async def _ops_health(self, app: App, trace: Trace) -> Response:
         checks: Dict[str, Any] = {}
         healthy = True
-        try:
-            async with trace.span("kv.probe"):
-                stamp = str(_ms())
-                await app.kv.put("health/probe", stamp, ttl_secs=300)
-                got = await app.kv.get("health/probe")
-            checks["kv"] = {"ok": got == stamp, "mode": app.mode["kv"]}
-            healthy &= got == stamp
-        except Exception as exc:
-            checks["kv"] = {"ok": False, "error": str(exc)[:160]}
-            healthy = False
+        # A KV write+read round trip costs ~3 s on Telnyx KV REST, and dashboards poll this route every 5 s,
+        # so the probe result is reused for KV_PROBE_SECS (reported as checked_secs_ago).
+        cached = getattr(app, "_kv_probe", None)
+        if cached and time.monotonic() - cached[0] < KV_PROBE_SECS:
+            checks["kv"] = {**cached[1], "checked_secs_ago": round(time.monotonic() - cached[0])}
+        else:
+            try:
+                async with trace.span("kv.probe"):
+                    stamp = str(_ms())
+                    await app.kv.put("health/probe", stamp, ttl_secs=300)
+                    got = await app.kv.get("health/probe")
+                checks["kv"] = {"ok": got == stamp, "mode": app.mode["kv"]}
+            except Exception as exc:
+                checks["kv"] = {"ok": False, "error": str(exc)[:160]}
+            app._kv_probe = (time.monotonic(), checks["kv"])
+        healthy &= bool(checks["kv"]["ok"])
         metrics: Dict[str, Any] = {}
         try:
             async with trace.span("actor ops.snapshot"):

@@ -1,0 +1,28 @@
+# Keep the Edge Functions warm and act as the uptime check.
+# Telnyx Edge scales idle functions to zero (no min-instances setting), so the first visitor after a quiet
+# spell pays a cold start of forge-api plus forge-state. Pinging every 5 minutes keeps both warm. A failing
+# /ops/health turns this job red, and GitHub emails the repo owner: the "know within minutes" alert.
+name: keep-warm
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # GitHub's minimum; runs can be delayed under load
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      API: https://forge-api-3cb24047-7.telnyxcompute.com
+      STATE: https://forge-state-08d0ac2c-f.telnyxcompute.com
+    steps:
+      - name: Wake both functions
+        run: |
+          curl -fsS --retry 3 --retry-delay 5 --max-time 30 "$STATE/health"
+          curl -fsS --retry 3 --retry-delay 5 --max-time 30 "$API/health"
+      - name: Deep health (KV, actors, Telnyx API)
+        run: |
+          body=$(curl -sS --retry 2 --retry-delay 10 --max-time 45 -w '\n%{http_code}' "$API/ops/health")
+          echo "$body"
+          [ "$(echo "$body" | tail -1)" = "200" ]

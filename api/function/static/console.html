@@ -163,6 +163,13 @@ New patient cleanings are 99 dollars</textarea>
       <div class="card"><h2>Recent errors and degraded requests</h2><div class="scroll"><table id="ops-errors"></table></div></div>
       <div class="card"><h2>Forge flags (KV flags/global)</h2><div id="flags-forge"></div></div>
       <div class="card"><h2>Clinic flags (KV flags/clinic)</h2><div id="flags-clinic"></div></div>
+      <div class="card"><h2>KV browser <span class="small muted" id="kv-ns"></span></h2>
+        <div class="row"><input id="kv-prefix" placeholder="prefix, e.g. flags/"><button id="kv-go">List</button></div>
+        <div class="row small" id="kv-prefixes" style="margin:6px 0"></div>
+        <div class="scroll" style="max-height:320px"><table id="kv-keys"></table></div>
+        <pre id="kv-value" class="small" style="white-space:pre-wrap;max-height:320px;overflow:auto"></pre>
+      </div>
+      <div class="card"><h2>Links</h2><div id="links" class="small"></div></div>
     </div>
   </section>
 
@@ -371,7 +378,27 @@ async function loadFlags(){for(const scope of['forge','clinic']){try{const r=awa
   for(const [k,v] of Object.entries(r.flags)){let inp;if(typeof v==='boolean'){inp=h('input',{type:'checkbox'});inp.checked=v}else if(typeof v==='number')inp=h('input',{type:'number',value:v,style:'width:90px'});else inp=h('input',{value:v,style:'width:100%'});inputs[k]=inp;box.append(h('div',{class:'row small'},h('label',{style:'min-width:210px'},k),inp))}
   box.append(h('div',{class:'row'},h('button',{onclick:async()=>{const patch={};for(const[k,inp]of Object.entries(inputs))patch[k]=inp.type==='checkbox'?inp.checked:inp.type==='number'?Number(inp.value):inp.value;await api('flags/'+scope,{body:patch});loadFlags()}},'Save'),h('span',{class:'small muted'},'source: '+r.source)))}catch(e){}}}
 $('ops-window').onchange=loadOps;
-onShow.ops=()=>{loadOps();loadFlags()};
+
+/* ---------- KV browser + links ---------- */
+async function loadKV(prefix){
+  if(prefix!==undefined)$('kv-prefix').value=prefix;
+  const r=await api('kv?prefix='+encodeURIComponent($('kv-prefix').value)+'&limit=500').catch(e=>({error:e.message}));
+  const t=clear($('kv-keys'));if(r.error){t.append(h('tr',{},h('td',{class:'err'},r.error)));return}
+  $('kv-ns').textContent=r.mode+' · '+r.namespace_id;
+  const chips=clear($('kv-prefixes'));chips.append(h('span',{class:'muted'},'prefixes: '));
+  for(const p of ['',...r.prefixes])chips.append(h('button',{class:'ghost',onclick:()=>loadKV(p)},p||'all'),' ');
+  t.append(h('tr',{},['Key','Size','Updated'].map(x=>h('th',{},x))));
+  for(const k of r.keys)t.append(h('tr',{style:'cursor:pointer',onclick:()=>showKV(k.key)},h('td',{},h('code',{},k.key)),h('td',{},(k.size_bytes??'')+' B'),h('td',{},k.updated_at?new Date(k.updated_at).toLocaleString():'')));
+  if(!r.keys.length)t.append(h('tr',{},h('td',{colspan:3,class:'muted'},'No keys'+(r.prefix?' under '+r.prefix:'')+'. Flags appear after the first change; agents/ after a build; session/chat/ after a console chat.')));
+}
+async function showKV(key){try{const r=await api('kv/value?key='+encodeURIComponent(key));$('kv-value').textContent=key+' ('+r.size_bytes+' B, phone numbers masked)\n'+(typeof r.value==='string'?r.value:json(r.value))}catch(e){$('kv-value').textContent=key+': '+e.message}}
+$('kv-go').onclick=()=>loadKV();
+async function loadLinks(){try{const r=await api('links');const box=clear($('links'));
+  const sec=(title,items,render)=>{box.append(h('div',{style:'margin-top:6px'},h('b',{},title)));box.append(h('ul',{style:'margin:4px 0 0 0;padding-left:18px'},items.map(render)))};
+  const a=i=>i.url?h('li',{},h('a',{href:i.url,target:'_blank',rel:'noopener'},i.label),i.where?h('span',{class:'muted'},' ('+i.where+')'):null):null;
+  sec('This deployment',r.app,a);sec('Telnyx Portal',r.telnyx_portal,a);
+  sec('CLI (run in a terminal)',r.cli,i=>h('li',{},i.label+': ',h('code',{},i.command)));sec('Docs',r.docs,a)}catch(e){}}
+onShow.ops=()=>{loadOps();loadFlags();loadKV();loadLinks()};
 setInterval(()=>{if(current==='ops'&&!document.hidden)loadOps()},5000);
 
 /* ---------- Settings tab ---------- */

@@ -155,6 +155,14 @@ async def _route(fn: Any, app: Any, trace: Any, m: str, sub: str, body: Dict[str
     if head == "clinic":
         return await _clinic(app, trace, m, parts, body)
 
+    if sub == "kv" and m == "GET":
+        return _resp(200, await _kv_list(app, req))
+    if sub == "kv/value" and m == "GET":
+        return await _kv_value(app, req)
+
+    if sub == "links" and m == "GET":
+        return _resp(200, links(app))
+
     return _err(404, "not found")
 
 
@@ -389,4 +397,79 @@ async def _clinic(app: Any, trace: Any, m: str, parts: List[str], body: Dict[str
                                    trace_id=trace.trace_id)
         return _resp(200 if res.get("ok") else 404, {"ok": bool(res.get("ok"))})
     return _err(404, "not found")
+
+
+# ---------------------------------------------------------------------------
+# KV browser (read-only) and links
+# ---------------------------------------------------------------------------
+
+KV_PREFIXES = ["flags/", "agents/", "cache/polish/", "cache/triage/", "session/chat/", "health/"]
+
+
+async def _kv_list(app: Any, req: Any) -> Dict[str, Any]:
+    prefix = str(req.query.get("prefix") or "")
+    limit = min(max(int(req.query.get("limit") or 200), 1), 1000)
+    keys = await app.kv.list(prefix, limit)
+    return {
+        "namespace_id": app.settings.kv_namespace_id or "(in-memory)",
+        "mode": app.mode["kv"],
+        "prefix": prefix,
+        "prefixes": KV_PREFIXES,
+        "keys": keys,
+    }
+
+
+async def _kv_value(app: Any, req: Any):
+    key = str(req.query.get("key") or "")
+    if not key or ":" in key:
+        return _err(400, "expected ?key=")
+    raw = await app.kv.get(key)
+    if raw is None:
+        return _err(404, "no such key (or it expired)")
+    try:
+        value: Any = json.loads(raw)
+    except ValueError:
+        value = raw
+    # sessions and agent records hold phone numbers: mask them like every other console response
+    masked = _mask_events([value])[0] if not isinstance(value, str) else re.sub(
+        r"\+\d{11,15}", lambda m: mask_phone(m.group(0)), value)
+    return _resp(200, {"key": key, "size_bytes": len(raw.encode("utf-8")), "value": masked})
+
+
+def links(app: Any) -> Dict[str, Any]:
+    """Every place to look at this deployment: our own endpoints, the Telnyx Portal and the CLI."""
+    base = app.settings.public_api_url
+    ns = app.settings.kv_namespace_id or "<KV_NAMESPACE_ID>"
+    return {
+        "app": [
+            {"label": "Console", "url": f"{base}/ui"},
+            {"label": "API docs", "url": f"{base}/docs"},
+            {"label": "OpenAPI JSON", "url": f"{base}/openapi.json"},
+            {"label": "Health", "url": f"{base}/ops/health"},
+            {"label": "Metrics (admin token)", "url": f"{base}/ops/metrics?window=5"},
+            {"label": "Forge MCP (POST)", "url": f"{base}/mcp"},
+            {"label": "Clinic MCP (POST)", "url": f"{base}/clinic/mcp"},
+            {"label": "Actor host health", "url": f"{app.settings.state_url}/health" if app.settings.state_url else ""},
+        ],
+        "telnyx_portal": [
+            {"label": "Telnyx Portal", "url": "https://portal.telnyx.com/",
+             "where": "AI → AI Assistants · Numbers · Edge Compute (functions, KV, secrets) · Billing"},
+        ],
+        "cli": [
+            {"label": "Functions and their URLs", "command": "telnyx-edge list"},
+            {"label": "Live API logs", "command": "telnyx-edge logs forge-api --tail"},
+            {"label": "Actor host logs", "command": "telnyx-edge logs forge-state --tail"},
+            {"label": "Actor logs", "command": "telnyx-edge actors logs BuilderProfile --tail"},
+            {"label": "Actor instances", "command": "telnyx-edge actors instances BuilderProfile"},
+            {"label": "KV keys", "command": f"telnyx-edge storage kv key list {ns}"},
+            {"label": "KV value", "command": f"telnyx-edge storage kv key get {ns} flags/global"},
+            {"label": "Deploy history", "command": "telnyx-edge deployments forge-api"},
+            {"label": "Request metrics", "command": "telnyx-edge metrics forge-api"},
+        ],
+        "docs": [
+            {"label": "Edge Compute", "url": "https://developers.telnyx.com/docs/edge-compute/quickstart"},
+            {"label": "KV", "url": "https://developers.telnyx.com/docs/edge-compute/kv/api-reference"},
+            {"label": "CLI reference", "url": "https://developers.telnyx.com/docs/edge-compute/reference/cli"},
+        ],
+    }
 

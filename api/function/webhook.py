@@ -155,8 +155,7 @@ async def agent_variables(app: Any, trace: Any, key: str, body: Any) -> Dict[str
     try:
         import json
 
-        raw = await app.kv.get(f"agents/{key}")
-        record = json.loads(raw) if isinstance(raw, str) else (raw or None)
+        record = await agent_record(app, key)
         if record and caller and record.get("owner") == caller:
             values["is_owner"] = "true"
             values["owner_line"] = "This is your test call, so try anything you like."
@@ -164,6 +163,30 @@ async def agent_variables(app: Any, trace: Any, key: str, body: Any) -> Dict[str
         trace.set(degraded=True)
         trace.outcome = "degraded"
     return {"dynamic_variables": values}
+
+
+AGENT_MEMO_SECS = 60.0
+
+
+async def agent_record(app: Any, key: str) -> Optional[Dict[str, Any]]:
+    """`agents/{key}` is written once per build and read on every call to that agent, and a KV REST read
+    costs 1-3 s, so it is memoised per instance. A deleted agent may still look live here for up to a minute,
+    which is harmless: it only affects the owner greeting and where a message lands."""
+    import json
+
+    memo = getattr(app, "_agent_memo", None)
+    if memo is None:
+        memo = app._agent_memo = {}
+    hit = memo.get(key)
+    if hit and time.monotonic() - hit[0] < AGENT_MEMO_SECS:
+        return hit[1]
+    raw = await app.kv.get(f"agents/{key}")
+    record = json.loads(raw) if isinstance(raw, str) else (raw or None)
+    if isinstance(record, dict):
+        memo[key] = (time.monotonic(), record)
+        if len(memo) > 500:
+            memo.pop(next(iter(memo)))
+    return record if isinstance(record, dict) else None
 
 
 def _draft_fallback(message: str) -> Dict[str, Any]:
@@ -268,8 +291,7 @@ async def take_message(
     if not _bearer_ok(generator.agent_token(app.settings.mcp_token, key), auth):
         raise WebhookError(401, "unauthorized")
     trace.set(agent_key=key)
-    raw = await app.kv.get(f"agents/{key}")
-    record = json.loads(raw) if isinstance(raw, str) else (raw or None)
+    record = await agent_record(app, key)
     if not isinstance(record, dict) or not record.get("owner"):
         raise WebhookError(404, "unknown agent")
     caller_name = _clean(str(body.get("caller_name") or ""))[:80]

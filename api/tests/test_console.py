@@ -349,3 +349,20 @@ async def test_registry_tracks_delete(cc: Client, capp):
     detail = (await cc.get(f"/ui/api/agents/{key}", headers=AUTH)).json
     assert detail["registry"]["status"] == "deleted" and detail["agent"]["status"] == "deleted"
     assert capp.telnyx.assistants == {}
+
+
+async def test_kv_browser_and_links(cc: Client, capp):
+    await cc.start_call()  # writes nothing to KV by itself; seed some keys:
+    await capp.flags.update({"builds_enabled": False})
+    await capp.kv.put("agents/ag12345678", json.dumps({"owner": OWNER, "name": "Sam"}), ttl_secs=60)
+    assert (await cc.get("/ui/api/kv")).status == 401
+    listed = (await cc.get("/ui/api/kv?prefix=agents/", headers=AUTH)).json
+    assert [k["key"] for k in listed["keys"]] == ["agents/ag12345678"] and listed["mode"] == "memory"
+    allkeys = {k["key"] for k in (await cc.get("/ui/api/kv", headers=AUTH)).json["keys"]}
+    assert "flags/global" in allkeys
+    value = (await cc.get("/ui/api/kv/value?key=agents/ag12345678", headers=AUTH)).json
+    assert value["value"]["owner"] == "+15***2001" and OWNER not in json.dumps(value)
+    assert (await cc.get("/ui/api/kv/value?key=nope/x", headers=AUTH)).status == 404
+    links = (await cc.get("/ui/api/links", headers=AUTH)).json
+    assert any(l["url"].endswith("/docs") for l in links["app"])
+    assert any("storage kv key list" in c["command"] for c in links["cli"])

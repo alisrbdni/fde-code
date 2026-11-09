@@ -6,6 +6,7 @@ and tests (including TTL enforcement).
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field, fields as dc_fields
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -26,6 +27,10 @@ class KVBackend:
         raise NotImplementedError
 
     async def delete(self, key: str) -> None:
+        raise NotImplementedError
+
+    async def list(self, prefix: str = "", limit: int = 100) -> List[Dict[str, Any]]:
+        """[{key, size_bytes, updated_at}] sorted by key (read-only browsing for the console)."""
         raise NotImplementedError
 
 
@@ -67,6 +72,20 @@ class RestKV(KVBackend):
             return
         raise KVError(f"kv delete {key} -> {resp.status} {resp.text[:120]}")
 
+    async def list(self, prefix: str = "", limit: int = 100) -> List[Dict[str, Any]]:
+        from urllib.parse import urlencode
+
+        query = {"limit": str(max(1, min(int(limit), 1000)))}
+        if prefix:
+            query["prefix"] = prefix
+        resp = await request("GET", join_url(self.base, "keys") + "?" + urlencode(query), headers=self._headers)
+        if not resp.ok:
+            raise KVError(f"kv list {prefix!r} -> {resp.status} {resp.text[:120]}")
+        data = resp.json() or {}
+        items = data.get("data") if isinstance(data, dict) else None
+        return [{"key": i.get("key"), "size_bytes": i.get("size_bytes"), "updated_at": i.get("updated_at")}
+                for i in (items or []) if isinstance(i, dict)]
+
 
 class MemoryKV(KVBackend):
     """Local emulator of the KV API, with TTL and outage simulation."""
@@ -100,6 +119,14 @@ class MemoryKV(KVBackend):
             raise KVError("kv outage")
         self._check_key(key)
         self.store.pop(key, None)
+
+    async def list(self, prefix: str = "", limit: int = 100) -> List[Dict[str, Any]]:
+        if self.fail:
+            raise KVError("kv outage")
+        now = time.monotonic()
+        keys = sorted(k for k, (_, exp) in self.store.items() if k.startswith(prefix) and (exp is None or exp > now))
+        return [{"key": k, "size_bytes": len(self.store[k][0].encode("utf-8")), "updated_at": None}
+                for k in keys[:limit]]
 
     def _check_key(self, key: str) -> None:
         if ":" in key:
@@ -166,45 +193,83 @@ class Flags:
 
 
 class FlagStore:
-    """Read-through flag store with a 5 s memo; fails open to defaults."""
+    """Read-through flag store; fails open to defaults.
+
+    Telnyx KV REST reads take 1-3 s, and Forge's variables webhook has a 3 s budget, so flags are memoised for
+    30 s per instance. That includes the defaults when the key doesn't exist, which used to cost a KV read on
+    every request. A stale memo is served immediately while a background read refreshes it. Only the first
+    read on a fresh instance waits for KV, and even that is capped at READ_TIMEOUT.
+    """
+
+    MEMO_SECS = 30.0
+    ERROR_RETRY_SECS = 5.0
+    READ_TIMEOUT = 2.5
 
     def __init__(self, kv: KVBackend, key: str = "flags/global", cls: type = Flags) -> None:
         self.kv = kv
         self.key = key
         self.cls = cls
-        self._memo: Optional[Flags] = None
+        self._memo: Optional[Any] = None
         self._memo_at = 0.0
+        self._refresh: Optional["asyncio.Task[Any]"] = None
 
-    async def get(self, trace=None) -> Tuple[Any, str]:
-        now = time.monotonic()
-        if self._memo is not None and now - self._memo_at < 5.0:
-            return self._memo, "memo"
-        raw = None
-        try:
-            if trace is not None:
-                async with trace.span("kv.get flags"):
-                    raw = await self.kv.get(self.key)
-            else:
-                raw = await self.kv.get(self.key)
-        except Exception as exc:
-            log("warn", "flags.read_failed", key=self.key, error=str(exc))
-            return self.cls(), "default_on_error"
+    async def _read(self, trace=None) -> Tuple[Any, str]:
+        import json
+
+        if trace is not None:
+            async with trace.span("kv.get flags"):
+                raw = await asyncio.wait_for(self.kv.get(self.key), self.READ_TIMEOUT)
+        else:
+            raw = await asyncio.wait_for(self.kv.get(self.key), self.READ_TIMEOUT)
         if raw is None:
             return self.cls(), "default"
         try:
-            import json
-
             data = json.loads(raw)
         except Exception:
             data = {}
-        flags = self.cls.from_dict(data if isinstance(data, dict) else {})
-        self._memo, self._memo_at = flags, now
-        return flags, "kv"
+        return self.cls.from_dict(data if isinstance(data, dict) else {}), "kv"
+
+    def _remember(self, flags: Any, age: float = 0.0) -> None:
+        self._memo, self._memo_at = flags, time.monotonic() - age
+
+    async def _refresh_now(self) -> None:
+        try:
+            flags, _ = await self._read()
+            self._remember(flags)
+        except Exception as exc:
+            log("warn", "flags.refresh_failed", key=self.key, error=str(exc)[:160])
+        finally:
+            self._refresh = None
+
+    async def get(self, trace=None) -> Tuple[Any, str]:
+        now = time.monotonic()
+        if self._memo is not None:
+            if now - self._memo_at < self.MEMO_SECS:
+                return self._memo, "memo"
+            if self._refresh is None:  # stale-while-revalidate
+                try:
+                    self._refresh = asyncio.get_running_loop().create_task(self._refresh_now())
+                except RuntimeError:
+                    pass
+            return self._memo, "memo_stale"
+        try:
+            flags, source = await self._read(trace)
+        except Exception as exc:
+            log("warn", "flags.read_failed", key=self.key, error=str(exc)[:160] or type(exc).__name__)
+            flags, source = self.cls(), "default_on_error"
+            # retry soon rather than hammering KV on every request during an outage
+            self._remember(flags, age=self.MEMO_SECS - self.ERROR_RETRY_SECS)
+            return flags, source
+        self._remember(flags)
+        return flags, source
 
     async def update(self, patch: Dict[str, Any]) -> Any:
         import json
 
-        current, _ = await self.get()
+        try:
+            current, _ = await self._read()  # read-modify-write against KV, not the memo
+        except Exception:
+            current = self._memo or self.cls()
         data = current.to_dict()
         for name, value in patch.items():
             if name in data:
@@ -215,7 +280,7 @@ class FlagStore:
         try:
             await self.kv.put(self.key, payload)
         finally:
-            self._memo, self._memo_at = flags, time.monotonic()
+            self._remember(flags)
         return flags
 
 

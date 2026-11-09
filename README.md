@@ -31,6 +31,23 @@ Function (`forge-state`) hosting six **Stateful Actors**. The project was built 
 
 Tokens for the protected routes are shared on request; they're not in the repo.
 
+### See inside the deployment
+| What | Where |
+|---|---|
+| **KV contents** (flags, agent records, caches, chat sessions) | Console → **Ops** → *KV browser* (read-only, phone numbers masked) · `telnyx-edge storage kv key list c9ecd641-1027-4bef-ae25-e7eab17140a1` · `telnyx-edge storage kv key get c9ecd641-1027-4bef-ae25-e7eab17140a1 flags/global` |
+| **Actor state** (drafts, agents, bookings, inbox) | Console → **Agents** / **Clinic** tabs · `telnyx-edge actors instances BuilderProfile` · `telnyx-edge actors logs BuilderProfile --tail` |
+| **Logs** (one JSON line per request, with trace id) | `telnyx-edge logs forge-api --tail` · `telnyx-edge logs forge-state --tail` |
+| **Metrics and health** | Console → **Ops** (refreshes every 5 s) · [/ops/health](https://forge-api-3cb24047-7.telnyxcompute.com/ops/health) · `telnyx-edge metrics forge-api` |
+| **Deploys** | `telnyx-edge list` (status + URLs) · `telnyx-edge deployments forge-api` (history, why a deploy failed) |
+| **API reference** | [/docs](https://forge-api-3cb24047-7.telnyxcompute.com/docs) · [/openapi.json](https://forge-api-3cb24047-7.telnyxcompute.com/openapi.json) |
+| **Telnyx Portal** | [portal.telnyx.com](https://portal.telnyx.com/): AI → AI Assistants · Numbers · Edge Compute (functions, KV, secrets) · Billing |
+| **All of the above in one place** | Console → **Ops** → *Links* |
+
+**Cold starts:** Telnyx Edge scales idle functions to zero, so the first request after a quiet spell can take a few
+seconds. [`.github/workflows/keep-warm.yml`](.github/workflows/keep-warm.yml) pings both functions every 5 minutes
+to keep them warm. It doubles as the uptime check, because a failing `/ops/health` turns the run red and GitHub
+emails you. A ship also replaces the running containers, so expect a brief blip right after a deploy.
+
 ### Getting a phone number
 The functions are deployed, but the Telnyx account has no phone numbers yet (a number is bought, it doesn't come
 free), so the phone flows can't be called. Until then, everything below works in the console. To enable calling:
