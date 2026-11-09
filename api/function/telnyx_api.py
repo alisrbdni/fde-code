@@ -256,5 +256,5 @@ class FakeTelnyx:
     async def list_models(self) -> List[Dict[str, Any]]:
         return [
             {"id": "moonshotai/Kimi-K3", "status": "available"},
-            {"id": "meta-llama/Meta-Llama-3.1-8B-Instruct", "status": "available"},
+            {"id": "zai-org/GLM-5.3-Flash", "status": "available"},
         ]

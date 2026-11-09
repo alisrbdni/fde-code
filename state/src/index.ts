@@ -7,6 +7,10 @@ import { OpsMetrics } from "./actors/ops-metrics"
 import { AgentRegistry } from "./actors/agent-registry"
 import { ClinicSchedule, ClinicPatient, ClinicDesk } from "./actors/clinic"
 import { log } from "./log"
+import { setting } from "./config"
+
+// Actor classes are exported from the entry, where telnyx.toml's [[actors]] `type` names them.
+export { BuilderProfile, OpsMetrics, AgentRegistry, ClinicSchedule, ClinicPatient, ClinicDesk }
 
 export interface Env {
   API_URL: string
@@ -91,12 +95,13 @@ export default {
       return json(400, { ok: false, error: "invalid_json" })
     }
     const traceId = String(body.trace_id || "")
-    if (!env.STATE_TOKEN) {
+    const stateToken = await setting(env, "STATE_TOKEN")
+    if (!stateToken) {
       return json(500, { ok: false, error: "STATE_TOKEN not configured" })
     }
     const auth = req.headers.get("authorization") || ""
     const token = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : ""
-    if (!token || !timingSafeEqual(token, env.STATE_TOKEN)) {
+    if (!token || !timingSafeEqual(token, stateToken)) {
       log("warn", "rpc.unauthorized", { trace_id: traceId })
       return json(401, { ok: false, error: "unauthorized" })
     }

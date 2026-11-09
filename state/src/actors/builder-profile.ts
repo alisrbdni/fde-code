@@ -5,6 +5,7 @@
  * due jobs to the API's /internal/jobs endpoint.
  */
 import { StatefulActor } from "@telnyx/edge-runtime"
+import { setting } from "../config"
 import { log } from "../log"
 
 export interface Job {
@@ -424,8 +425,8 @@ export class BuilderProfile extends StatefulActor {
       return
     }
     const started = Date.now()
-    const apiBase = (this.env?.API_URL || "").replace(/\/$/, "")
-    const token = this.env?.STATE_TOKEN || ""
+    const apiBase = (await setting(this.env, "API_URL")).replace(/\/$/, "")
+    const token = await setting(this.env, "STATE_TOKEN")
     let results: JobResult[] = []
     let outcome: "ok" | "degraded" | "error" = "ok"
     let errorText: string | undefined

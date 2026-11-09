@@ -574,3 +574,36 @@ def test_generated_workflow_passes_validator(escalation):
     assert errors == []
     ids = {n["id"] for n in flow["nodes"]}
     assert ("transfer" in ids) is escalation
+
+
+async def test_rest_kv_wire_format(monkeypatch):
+    """RestKV must match the live Telnyx KV REST API: raw value body (text/plain), ?ttl_secs=N,
+    GET returns the raw value, 404 = missing. (Found against the real API: a JSON envelope was
+    stored verbatim, and join_url crashed on three segments.)"""
+    from function import kv as kvmod
+    from function.http import HttpResponse
+
+    sent = []
+    store = {}
+
+    async def fake_request(method, url, headers=None, body=None, timeout=10):
+        sent.append((method, url, dict(headers or {}), body))
+        key = url.split("/keys/")[1].split("?")[0]
+        if method == "PUT":
+            store[key] = body
+            return HttpResponse(200, b"{}")
+        if method == "GET":
+            return HttpResponse(200, store[key]) if key in store else HttpResponse(404, b"{}")
+        store.pop(key, None)
+        return HttpResponse(200, b"{}")
+
+    monkeypatch.setattr(kvmod, "request", fake_request)
+    kv = kvmod.RestKV("https://api.telnyx.com/v2/storage/kvs/", "ns-1", "KEY")
+    await kv.put("flags/global", '{"a": 1}', ttl_secs=60)
+    method, url, headers, body = sent[-1]
+    assert url == "https://api.telnyx.com/v2/storage/kvs/ns-1/keys/flags%2Fglobal?ttl_secs=60"
+    assert body == b'{"a": 1}' and headers["content-type"].startswith("text/plain")
+    assert headers["authorization"] == "Bearer KEY"
+    assert await kv.get("flags/global") == '{"a": 1}'
+    await kv.delete("flags/global")
+    assert await kv.get("flags/global") is None

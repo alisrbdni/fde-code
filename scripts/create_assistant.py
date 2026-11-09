@@ -97,7 +97,15 @@ def main() -> int:
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            print(f"{response.status} {response.read().decode('utf-8', 'replace')[:400]}")
+            raw = response.read().decode("utf-8", "replace")
+            print(f"{response.status} {raw[:400]}")
+            try:
+                data = json.loads(raw)
+                data = data.get("data", data) if isinstance(data, dict) else {}
+                if data.get("id"):
+                    print(f"assistant_id={data['id']}")  # machine-readable line for deployment.sh
+            except ValueError:
+                pass
             return 0
     except urllib.error.HTTPError as exc:
         print(f"HTTP {exc.code}: {exc.read().decode('utf-8', 'replace')[:500]}", file=sys.stderr)

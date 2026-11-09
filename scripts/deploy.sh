@@ -11,30 +11,35 @@ if [[ "${1:-}" == "ship" ]]; then
   python3 scripts/validate_workflow.py
   (cd api && python3 -m pytest -q)
   (cd state && npm test --silent && npm run --silent typecheck)
-  echo "==> shipping forge-state (actors)"; (cd state && telnyx-edge ship)
-  echo "==> shipping forge-api";           (cd api && telnyx-edge ship)
+  echo "==> shipping forge-state (actors)"; telnyx-edge ship --from-dir state
+  echo "==> shipping forge-api";           telnyx-edge ship --from-dir api
   echo "==> done. Check: curl -fsS \"\$API_URL/ops/health\""
   exit 0
 fi
 
 cat <<'STEPS'
-First-time deployment (run once, in order)
+First-time deployment: run ./deployment.sh (interactive; does all of this for you).
+Manual equivalent, in order:
 
- 1. CLI + auth
-      curl -fsSL https://github.com/team-telnyx/edge-compute/releases/latest/download/telnyx-edge-linux-amd64.tar.gz | tar xz
-      sudo mv telnyx-edge /usr/local/bin/ && telnyx-edge auth login
+ 1. CLI + auth (release assets are versioned; check github.com/team-telnyx/edge-compute/releases)
+      V=v0.5.17
+      curl -fsSL "https://github.com/team-telnyx/edge-compute/releases/download/$V/telnyx-edge-$V-linux-amd64.tar.gz" | tar xz
+      sudo mv "telnyx-edge-$V-linux-amd64/telnyx-edge" /usr/local/bin/
+      telnyx-edge auth api-key set "$TELNYX_API_KEY" && telnyx-edge auth status
 
- 2. KV namespace (copy its id into api/func.toml KV_NAMESPACE_ID)
-      Portal: Storage -> KV -> create "agent-forge"   (or the KV REST API)
+ 2. KV namespace (copy its id into api/func.toml: KV_NAMESPACE_ID and [storage.kv.FORGE_KV] id)
+      telnyx-edge storage kv create --name agent-forge
 
- 3. Create both functions (copy each func_id into state/telnyx.toml and api/func.toml)
-      telnyx-edge new-func forge-state -l typescript   # then keep our state/ sources
-      telnyx-edge new-func forge-api   -l python       # then keep our api/ sources
+ 3. Create both functions in a scratch folder; copy each func_id into state/func.toml and api/func.toml
+      mkdir -p ~/edge-scaffold && cd ~/edge-scaffold
+      telnyx-edge new-func -l ts -n forge-state
+      telnyx-edge new-func -l python -n forge-api
 
- 4. Secrets (same STATE_TOKEN on both functions)
-      openssl rand -hex 24   # use for STATE_TOKEN, MCP_TOKEN, ADMIN_TOKEN
-      (cd state && telnyx-edge secrets add STATE_TOKEN && telnyx-edge secrets add API_URL)
-      (cd api && for s in TELNYX_API_KEY MCP_TOKEN ADMIN_TOKEN STATE_TOKEN; do telnyx-edge secrets add $s; done)
+ 4. Secrets (org-wide; the value is an argument)
+      telnyx-edge secrets add STATE_TOKEN "$STATE_TOKEN"
+      telnyx-edge secrets add MCP_TOKEN "$MCP_TOKEN"
+      telnyx-edge secrets add ADMIN_TOKEN "$ADMIN_TOKEN"
+      telnyx-edge secrets add API_URL "https://forge-api-<org>.telnyxcompute.com"   # after step 5
 
  5. Ship the actor host first, then the API
       (cd state && telnyx-edge ship)     # note its URL -> STATE_URL in api/func.toml

@@ -47,18 +47,16 @@ class RestKV(KVBackend):
             return None
         if not resp.ok:
             raise KVError(f"kv get {key} -> {resp.status} {resp.text[:120]}")
-        data = resp.json()
-        # {"data": {"key": ..., "value": ...}} or a bare value; accept both.
-        if isinstance(data, dict) and "data" in data and isinstance(data["data"], dict):
-            return data["data"].get("value")
+        # GET returns the stored bytes as-is (what put() sent).
         return resp.text
 
     async def put(self, key: str, value: str, ttl_secs: Optional[int] = None) -> None:
         url = join_url(self.base, "keys", quote_key(key))
         if ttl_secs:
             url += f"?ttl_secs={int(ttl_secs)}"
-        payload = {"key": key, "value": value}
-        resp = await request("PUT", url, headers=self._headers, body=payload)
+        # The KV REST API stores the request body verbatim (no JSON envelope), like the CLI does.
+        headers = {**self._headers, "content-type": "text/plain; charset=utf-8"}
+        resp = await request("PUT", url, headers=headers, body=value.encode("utf-8"))
         if not resp.ok:
             raise KVError(f"kv put {key} -> {resp.status} {resp.text[:120]}")
 

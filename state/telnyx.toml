@@ -1,36 +1,34 @@
+# forge-state: TypeScript Edge Function hosting the Stateful Actors (umbrella manifest).
+# Format per https://developers.telnyx.com/docs/edge-compute/configuration : [[actors]] uses
+# `binding` (the env handle the code uses) and `type` (a class exported from `main`).
 name = "forge-state"
 main = "src/index.ts"
+compatibility_date = "2026-05-01"
 
 [[actors]]
 binding = "BUILDER"
-class_name = "BuilderProfile"
-main = "src/actors/builder-profile.ts"
+type = "BuilderProfile"
 
 [[actors]]
 binding = "OPS"
-class_name = "OpsMetrics"
-main = "src/actors/ops-metrics.ts"
+type = "OpsMetrics"
 
 [[actors]]
 binding = "REGISTRY"
-class_name = "AgentRegistry"
-main = "src/actors/agent-registry.ts"
+type = "AgentRegistry"
 
 [[actors]]
 binding = "SCHEDULE"
-class_name = "ClinicSchedule"
-main = "src/actors/clinic.ts"
+type = "ClinicSchedule"
 
 [[actors]]
 binding = "PATIENT"
-class_name = "ClinicPatient"
-main = "src/actors/clinic.ts"
+type = "ClinicPatient"
 
 [[actors]]
 binding = "DESK"
-class_name = "ClinicDesk"
-main = "src/actors/clinic.ts"
+type = "ClinicDesk"
 
 [edge_compute]
-func_id = "REPLACE_WITH_STATE_FUNC_ID"
+func_id = "08d0ac2c-f2cc-456c-9f12-a20118c05587"
 func_name = "forge-state"

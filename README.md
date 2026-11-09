@@ -152,7 +152,7 @@ route (a webhook answered with defaults), `feature_level != full` (the ladder st
 (a test call or deletion didn't happen).
 
 **What we'd look at first:** `/ops/health` (which check is red?), then `/ops/metrics` → `recent_errors` → take
-the `trace_id` → search the logs for it (`telnyx-edge ship status forge-api --logs`) → find the failing span.
+the `trace_id` → search the logs for it (`telnyx-edge logs forge-api --since 15m --json`, and `telnyx-edge actors logs BuilderProfile --tail` for the actor side) → find the failing span.
 
 ## Deploy (Telnyx Edge)
 `scripts/deploy.sh` prints the first-time steps (KV namespace, secrets, both functions, TeXML app and numbers,

@@ -94,8 +94,12 @@ async def get_json(url: str, headers: Optional[Mapping[str, str]] = None, timeou
     return resp.json()
 
 
-def join_url(base: str, path: str) -> str:
-    return base.rstrip("/") + "/" + path.lstrip("/")
+def join_url(base: str, *parts: str) -> str:
+    """Join a base URL and path segments with single slashes: join_url("https://x/v2/", "/keys", "a%2Fb")."""
+    url = base.rstrip("/")
+    for part in parts:
+        url += "/" + str(part).strip("/")
+    return url
 
 
 def quote_key(key: str) -> str:
