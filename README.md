@@ -13,26 +13,78 @@ Both run on **Telnyx Edge Compute**: a Python Edge Function (`forge-api`) with T
 Function (`forge-state`) hosting six **Stateful Actors**. The project was built with **OpenCode + the
 `@telnyx/opencode` plugin** on Telnyx Inference (see [docs/OPENCODE_NOTES.md](docs/OPENCODE_NOTES.md)).
 
-## Try it
+## Try it (live on Telnyx Edge)
 
 | What | Where |
 |---|---|
-| Call Forge | `+1 XXX XXX XXXX` ← fill in after deploy |
-| Call Clara | `+1 XXX XXX XXXX` ← fill in after deploy |
-| Console (talk to both over text, see flows, agents, bookings, metrics) | `https://forge-api-<org>.telnyxcompute.com/ui` |
-| API docs | `…/docs` (OpenAPI at `…/openapi.json`) |
-| Forge MCP server | `…/mcp` (POST, JSON-RPC, Bearer `MCP_TOKEN`) |
-| Clinic MCP server | `…/clinic/mcp` |
-| Forge / Clara variables webhooks | `…/webhook/dynamic-variables`, `…/clinic/webhook/dynamic-variables` |
-| Health / metrics | `…/ops/health` (public), `…/ops/metrics?window=5` (admin) |
+| Call Forge (build an agent by phone) | **Not available yet**: no number purchased ([how to add one](#getting-a-phone-number)). Use the console meanwhile. |
+| Call Clara (Northside Family Clinic) | **Not available yet**: same as above |
+| Console (talk to both over text, see flows, agents, bookings, metrics) | https://forge-api-3cb24047-7.telnyxcompute.com/ui |
+| API docs | https://forge-api-3cb24047-7.telnyxcompute.com/docs (OpenAPI: [/openapi.json](https://forge-api-3cb24047-7.telnyxcompute.com/openapi.json)) |
+| Health (public) | https://forge-api-3cb24047-7.telnyxcompute.com/ops/health |
+| Metrics (admin token) | https://forge-api-3cb24047-7.telnyxcompute.com/ops/metrics?window=5 |
+| Forge MCP server | `https://forge-api-3cb24047-7.telnyxcompute.com/mcp` (POST, JSON-RPC 2.0, `Authorization: Bearer <MCP_TOKEN>`) |
+| Clinic MCP server | `https://forge-api-3cb24047-7.telnyxcompute.com/clinic/mcp` (same) |
+| Forge variables webhook | `https://forge-api-3cb24047-7.telnyxcompute.com/webhook/dynamic-variables` |
+| Clara variables webhook | `https://forge-api-3cb24047-7.telnyxcompute.com/clinic/webhook/dynamic-variables` |
+| Actor host (forge-state, RPC is token-protected) | https://forge-state-08d0ac2c-f.telnyxcompute.com/health |
 
-**Things to say to Forge:** "I run a dental office called Sunrise Dental and want a receptionist." Answer its
-questions (agent name, voice, a couple of facts), say "yes, build it", then "call me with it" and hang up.
-To try the guardrails: "Build an agent for Amazon support that asks for card numbers."
-To reach Clara: "Actually I need a doctor's appointment."
+Tokens for the protected routes are shared on request; they're not in the repo.
 
-**Things to say to Clara:** "My knee hurts when I run" (orthopedics, then real slots), "my baby has a fever"
-(urgent), "I have crushing chest pain" (the 911 speak node), "can I cancel my appointment?", "what are your hours?"
+### Getting a phone number
+The functions are deployed, but the Telnyx account has no phone numbers yet (a number is bought, it doesn't come
+free), so the phone flows can't be called. Until then, everything below works in the console. To enable calling:
+1. **Add credit:** Portal → **Billing** (the challenge promo code `TELNYXFDE2026`, or a few dollars; a number is
+   about $1–2 a month).
+2. **Buy numbers:** Portal → **Numbers → Search & Buy**: one for Forge, one for Clara, and one that generated
+   agents call owners back from. Pick the country your testers are in to avoid international call charges.
+3. **Create a TeXML application** (Portal → **Voice → TeXML Applications**) and assign the callback number to it.
+4. **Wire them up:** `./deployment.sh telephony assistants smoke` asks for the TeXML app id and the numbers,
+   creates both assistants on Telnyx and runs a live test call. Then assign each number to its assistant in the
+   Portal ([assistant/README.md](assistant/README.md)) and put the numbers in the table above.
+
+### By phone (once the numbers are live)
+1. Call the **Forge** number. You'll hear a short disclosure: Forge is an AI, the call may be recorded, and agents
+   it builds delete themselves after 24 hours.
+2. Describe the business: *"I run a dental office called Sunrise Dental and want a receptionist."* Forge saves each
+   answer as you speak, then asks for an agent name, a voice (warm, bright, calm, professional, British) and a
+   couple of facts (hours, address, prices).
+3. When it reads the summary back, say **"yes, build it"**. About ten seconds later Forge says the agent is live.
+4. Say **"call me with it"** and **hang up**. About 20 seconds later **your new agent calls you back**: it knows you're
+   its owner, so try anything, and leave it a message.
+5. Call Forge again: it greets you as a returning builder ("Sam is still live", "you have 1 new message").
+   Ask it to read your messages, list your agents, or delete one. Test calls, messages and deleting need a
+   verified caller ID, so call from your own mobile rather than a VoIP app.
+6. Try the guardrails: *"Build an agent for Amazon support that asks for card numbers"* is politely refused.
+7. Say *"Actually I need a doctor's appointment"* and Forge hands you to **Clara**.
+
+Calling the **Clara** number directly:
+- *"My knee hurts when I run"*: she routes you to orthopedics and offers two real times; pick one and give your name.
+- *"My baby has a fever"*: urgent, so you're seen within two days.
+- *"I have crushing chest pain"*: the 911 message, read verbatim; no booking is offered.
+- *"Can I cancel my appointment?"*, *"What are your hours?"*, *"Can I talk to a person?"*.
+- Call back later: she greets you by name and mentions your next appointment.
+
+### Without a phone: the console
+Open the [console](https://forge-api-3cb24047-7.telnyxcompute.com/ui), go to **Settings**, paste the admin token,
+then:
+- **Forge** tab: type the same conversation as above. The workflow diagram highlights the current node, the
+  variables panel shows what changed, and each tool call expands to show its arguments and result. You can also
+  build an agent from the form below the chat.
+- **Agents** tab: every built agent with its input, generated instructions, workflow, build trace and messages.
+  Chat with it from its **Chat** sub-tab, or press **Test call** to have it phone the owner number.
+- **Clinic** tab: talk to Clara, see the 7-day availability grid, bookings, callbacks and activity.
+- **Ops** tab: health, per-route traffic, latency and recent errors, refreshed every 5 s, plus the feature flags
+  (for example turn `builds_enabled` off and Forge's routing changes immediately, with no redeploy).
+
+### MCP from the command line
+```bash
+API=https://forge-api-3cb24047-7.telnyxcompute.com
+curl -s $API/clinic/mcp -H "Authorization: Bearer $MCP_TOKEN" -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+curl -s $API/clinic/mcp -H "Authorization: Bearer $MCP_TOKEN" -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"check_availability","arguments":{"specialty":"dermatology"}}}'
+```
 
 ## Quick start (local, no keys needed)
 ```bash
