@@ -346,6 +346,7 @@ def full_payload(
         "telephony_settings": {
             "time_limit_secs": 600,
             "user_idle_timeout_secs": 60,
+            "supports_unauthenticated_web_calls": True,  # so the owner can call it from the browser too
             # the API rejects an empty id; test calls need it, so it's set once TEXML_APP_ID exists
             **({"default_texml_app_id": settings.texml_app_id} if settings.texml_app_id else {}),
         },

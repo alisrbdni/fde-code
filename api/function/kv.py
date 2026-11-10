@@ -90,7 +90,7 @@ class RestKV(KVBackend):
         query = {"limit": str(max(1, min(int(limit), 1000)))}
         if prefix:
             query["prefix"] = prefix
-        resp = await request("GET", join_url(self.base, "keys") + "?" + urlencode(query), headers=self._headers)
+        resp = await self._send("GET", join_url(self.base, "keys") + "?" + urlencode(query), headers=self._headers)
         if not resp.ok:
             raise KVError(f"kv list {prefix!r} -> {resp.status} {resp.text[:120]}")
         data = resp.json() or {}

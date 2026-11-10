@@ -22,6 +22,7 @@ ul{margin:6px 0 0;padding-left:18px}
 #stage{margin-top:16px}
 a{color:var(--accent)}
 code{font:13px ui-monospace,monospace}
+.hidden{display:none}
 </style>
 </head>
 <body>
@@ -45,6 +46,11 @@ code{font:13px ui-monospace,monospace}
     </div>
   </div>
 
+  <div class="card hidden" id="custom" style="margin-top:12px">
+    <h2 id="custom-title">Your new agent</h2>
+    <p>The agent Forge just built for you. Call it the way your customers would.</p>
+    <button id="call-custom">Start call</button>
+  </div>
   <div id="stage"></div>
   <p class="muted" id="note"></p>
   <p class="muted">Prefer typing? Use the chat in the <a href="/ui">console</a>, which works without a token.
@@ -75,9 +81,21 @@ async function start(agentId, name) {
   stage.appendChild(el);
   note.textContent = "Press the call button in the widget to talk to " + name + ".";
 }
-for (const [id, name] of [["call-forge", "Forge"], ["call-clinic", "Clara"]]) {
+// /call?agent=assistant-…&name=… adds a card for a generated agent (opened from the console's My agents tab)
+const params = new URLSearchParams(location.search);
+const customId = params.get("agent") || "";
+if (/^assistant-[A-Za-z0-9-]{8,64}$/.test(customId)) {
+  const name = (params.get("name") || "your agent").slice(0, 80);
+  document.getElementById("custom").classList.remove("hidden");
+  document.getElementById("custom-title").textContent = name;
+  const b = document.getElementById("call-custom");
+  b.dataset.agent = customId;
+  b.textContent = "Start call with " + name;
+}
+for (const [id, name] of [["call-forge", "Forge"], ["call-clinic", "Clara"], ["call-custom", (params.get("name") || "your agent").slice(0, 80)]]) {
   const btn = document.getElementById(id);
   const agent = btn.dataset.agent;
+  if (id === "call-custom" && !agent) continue;
   if (!agent) {
     btn.disabled = true;
     btn.textContent = name + ": not created on Telnyx yet";

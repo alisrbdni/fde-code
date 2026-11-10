@@ -156,7 +156,8 @@ def forge_def() -> AssistantDef:
                                     {"draft_complete": "draft_complete"})
     specs["build_agent"] = ToolSpec("build_agent", "webhook", "Build the agent from the saved draft. Call it once.",
                                     {"type": "object", "properties": {}}, build_agent,
-                                    {"build_status": "build_status", "built_agent_name": "built_agent_name"})
+                                    {"build_status": "build_status", "built_agent_name": "built_agent_name",
+                                     "agent_key": "built_agent_key"})
     specs["hangup"] = _builtin("hangup", "hangup", "End the call.")
     specs["handoff"] = _builtin("handoff", "handoff", "Hand the caller off to Clara at Northside Family Clinic.")
 

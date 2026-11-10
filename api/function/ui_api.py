@@ -169,10 +169,12 @@ async def _route(fn: Any, app: Any, trace: Any, m: str, sub: str, body: Dict[str
     if head == "clinic":
         return await _clinic(app, trace, m, parts, body)
 
-    if sub == "kv" and m == "GET":
-        return _resp(200, await _kv_list(app, req))
-    if sub == "kv/value" and m == "GET":
-        return await _kv_value(app, req)
+    if sub in ("kv", "kv/value") and m == "GET":
+        try:
+            return _resp(200, await _kv_list(app, req)) if sub == "kv" else await _kv_value(app, req)
+        except Exception as exc:  # Telnyx KV REST has intermittent 500s/timeouts: say so instead of "internal error"
+            log("warn", "console.kv_unavailable", error=str(exc)[:160])
+            return _err(503, "Telnyx KV didn't answer just now (it has intermittent errors); press List again.")
 
     if sub == "links" and m == "GET":
         return _resp(200, links(app))
@@ -530,12 +532,20 @@ async def _public(app: Any, trace: Any, m: str, sub: str, body: Dict[str, Any], 
             "clinic_assistant_id": app.settings.clinic_assistant_id,
             "call_page": "/call",
         })
-    if parts[0] == "flow" and len(parts) == 2 and parts[1] in ("forge", "clinic") and m == "GET":
+    if parts[0] == "flow" and len(parts) == 2 and (parts[1] in ("forge", "clinic") or AGENT_KEY.match(parts[1])) and m == "GET":
         adef = await simulator.get_def(app, trace, parts[1])
         return _resp(200, {"id": adef.id, "name": adef.name, "flow": adef.flow, "node_tools": adef.node_tools,
                            "defaults": adef.defaults, "instructions": adef.instructions,
                            "tools": [{"name": t.name, "kind": t.kind, "description": t.description}
                                      for t in adef.tools.values()]})
+    if parts[0] == "agent" and len(parts) == 2 and AGENT_KEY.match(parts[1]) and m == "GET":
+        rec = (await app.state.call("registry", "global", "get", parts[1], trace_id=trace.trace_id)).get("agent")
+        if not rec:
+            return _err(404, "unknown agent")
+        # name, status and the Telnyx assistant id only (enough to chat or call it); never the owner
+        return _resp(200, {"key": rec.get("key"), "name": rec.get("name"), "status": rec.get("status"),
+                           "assistant_id": rec.get("assistantId"), "level": rec.get("level"),
+                           "expires_at": rec.get("expiresAt")})
     engine = simulator.Engine(app, trace)
     if sub == "chat/start" and m == "POST":
         if not _rate_ok(req, "start"):

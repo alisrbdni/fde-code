@@ -82,7 +82,7 @@ svg text{font:12px system-ui,sans-serif}
 <header>
   <h1>Agent Forge</h1>
   <nav id="nav">
-    <a href="#forge" data-tab="forge">Forge</a><a href="#agents" data-tab="agents">Agents</a>
+    <a href="#forge" data-tab="forge">Forge</a><a href="#agents" data-tab="agents">Agents</a><a href="#mine" data-tab="mine" id="nav-mine" class="hidden">My agents</a>
     <a href="#clinic" data-tab="clinic">Clinic</a><a href="#ops" data-tab="ops">Ops</a><a href="#settings" data-tab="settings">Settings</a><a href="/call" target="_blank" rel="noopener">📞 Call in browser</a>
   </nav>
   <div class="chips" id="chips"></div>
@@ -131,6 +131,19 @@ New patient cleanings are 99 dollars</textarea>
       <div class="row" style="margin-bottom:8px"><button id="agent-test">Test call</button><button class="danger" id="agent-delete">Delete</button><span class="small muted" id="agent-msg"></span></div>
       <div class="subtabs" id="agent-subtabs"></div>
       <div id="agent-pane"></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-mine">
+    <div class="grid chatflow">
+      <div class="grid">
+        <div class="card"><h2>Agents you built in this browser</h2>
+          <div class="row"><select id="mine-select" style="flex:1 1 220px"></select><a id="mine-call" class="hidden" target="_blank" rel="noopener"><button>📞 Call it in the browser</button></a><button class="ghost" id="mine-forget">Remove from list</button></div>
+          <div class="small muted" id="mine-meta" style="margin-top:6px"></div>
+        </div>
+        <div class="card" id="mine-chat"></div>
+      </div>
+      <div class="card"><h2>Its workflow</h2><div class="flowwrap" id="mine-flow"></div><div class="nodeinfo" id="mine-node"></div></div>
     </div>
   </section>
 
@@ -223,10 +236,10 @@ async function checkToken(raw,msgEl){
   if(msgEl){msgEl.className='small err';msgEl.textContent=!r?'✗ Could not reach the server.':/^KEY[A-Za-z0-9_]{10,}/.test(tok)?'✗ That looks like a Telnyx API key. Paste the ADMIN_TOKEN value from .env instead.':'✗ Rejected ('+r.status+'). Check you copied the whole ADMIN_TOKEN value from .env.'}
   return false;
 }
-function flowPath(id){return isAdmin()?'flow/'+id:(id==='forge'||id==='clinic')?'public/flow/'+id:null}
+function flowPath(id){return isAdmin()?'flow/'+id:(id==='forge'||id==='clinic'||/^ag[0-9a-f]{8}$/.test(id))?'public/flow/'+id:null}
 
 /* ---------- tabs ---------- */
-const tabs=['forge','agents','clinic','ops','settings'];let current='forge';const onShow={};
+const tabs=['forge','agents','mine','clinic','ops','settings'];let current='forge';const onShow={};
 function show(){current=(location.hash||'#forge').slice(1);if(!tabs.includes(current))current='forge';
   for(const t of tabs){$('tab-'+t).classList.toggle('on',t===current)}
   for(const a of document.querySelectorAll('nav a'))a.classList.toggle('on',a.dataset.tab===current);
@@ -348,6 +361,11 @@ function kv(obj){return h('table',{},Object.entries(obj||{}).map(([k,v])=>h('tr'
 let forgeFlow=null;
 const forgeChat=createChat($('forge-chat'),{title:'Talk to Forge',phone:'+15550102001',assistant:()=>'forge',onUpdate:st=>{
   forgeFlow=st.flow;renderFlow($('forge-flow'),st.flow.flow,st.session,n=>nodeInfo($('forge-node'),st.flow,n));renderVars($('forge-vars'),st);
+  const v=st.session.vars||{};
+  if(v.build_status==='ready'&&v.built_agent_key){const isNew=rememberAgent(v.built_agent_key,v.built_agent_name);
+    if(isNew&&!$('forge-chat').querySelector('[data-built="'+v.built_agent_key+'"]')){
+      $('forge-chat').querySelector('.transcript').appendChild(h('div',{class:'banner','data-built':v.built_agent_key},
+        (v.built_agent_name||'Your agent')+' is live. ',h('button',{onclick:()=>openMine(v.built_agent_key)},'Talk to it now →')))}}
   const d=st.session.draft;clear($('forge-draft'));if(d&&Object.keys(d).length)$('forge-draft').append(kv(d));else $('forge-draft').textContent='Empty draft.'}});
 async function loadForgeFlow(){if(forgeFlow)return;try{forgeFlow=await api(flowPath('forge'));renderFlow($('forge-flow'),forgeFlow.flow,null,n=>nodeInfo($('forge-node'),forgeFlow,n));$('forge-flow-meta').textContent=forgeFlow.flow.nodes.length+' nodes · '+forgeFlow.flow.edges.length+' edges'}catch(e){}}
 for(const t of['receptionist','appointments','faq','restaurant','events','lead_intake'])$('fb-template').append(h('option',{},t));
@@ -382,6 +400,27 @@ $('agents-refresh').onclick=loadAgents;
 $('agent-test').onclick=async()=>{try{const r=await api('agents/'+agentKey+'/test-call',{body:{}});$('agent-msg').textContent='Test call in '+r.delay_secs+' s'}catch(e){$('agent-msg').textContent=e.message}};
 $('agent-delete').onclick=async()=>{if(!confirm('Delete this agent now?'))return;try{await api('agents/'+agentKey+'/delete',{body:{}});$('agent-msg').textContent='Deleting...';setTimeout(()=>{openAgent(agentKey);loadAgents()},1500)}catch(e){$('agent-msg').textContent=e.message}};
 onShow.agents=loadAgents;
+
+/* ---------- My agents tab: agents built from this browser, testable without a token ---------- */
+function myAgents(){try{return JSON.parse(LS.get('myAgents','[]'))||[]}catch(e){return []}}
+function rememberAgent(key,name){const list=myAgents();if(list.some(a=>a.key===key))return false;
+  list.unshift({key,name:name||key,at:Date.now()});LS.set('myAgents',JSON.stringify(list.slice(0,20)));refreshMine();return true}
+let mineChat=null;
+function refreshMine(){const list=myAgents();$('nav-mine').classList.toggle('hidden',!list.length);
+  const sel=clear($('mine-select'));for(const a of list)sel.append(h('option',{value:a.key},a.name+' ('+a.key+')'));}
+function openMine(key){if(key)$('mine-select').value=key;location.hash='#mine';showMine()}
+async function showMine(){const key=$('mine-select').value;if(!key){$('mine-meta').textContent='Build an agent in the Forge tab first.';return}
+  const a=myAgents().find(x=>x.key===key)||{};$('mine-meta').textContent='Built '+fmtTime(a.at)+'. Starting a chat calls it like a phone caller would: greeting, questions, take a message.';
+  $('mine-call').classList.add('hidden');
+  api('public/agent/'+key).then(info=>{if(info.assistant_id&&info.status==='active'){$('mine-call').href='/call?agent='+encodeURIComponent(info.assistant_id)+'&name='+encodeURIComponent(info.name||'your agent');$('mine-call').classList.remove('hidden')}
+    else if(info.status&&info.status!=='active')$('mine-meta').textContent+=' Status: '+info.status+'.'}).catch(()=>{});
+  const box=clear($('mine-chat'));mineChat=createChat(box,{title:'Talk to '+(a.name||key),phone:'+15550102002',assistant:()=>$('mine-select').value,onUpdate:st=>{
+    if(st.flow&&st.flow.flow.nodes.length)renderFlow($('mine-flow'),st.flow.flow,st.session,n=>nodeInfo($('mine-node'),st.flow,n))}});
+  try{const f=await api(flowPath(key));renderFlow($('mine-flow'),f.flow,null,n=>nodeInfo($('mine-node'),f,n))}catch(e){clear($('mine-flow')).append(h('div',{class:'small muted'},'Workflow not available: '+e.message))}}
+$('mine-select').onchange=showMine;
+$('mine-forget').onclick=()=>{const key=$('mine-select').value;LS.set('myAgents',JSON.stringify(myAgents().filter(a=>a.key!==key)));refreshMine();showMine()};
+onShow.mine=showMine;
+refreshMine();
 
 /* ---------- Clinic tab ---------- */
 let clinicFlow=null,clinicData=null;

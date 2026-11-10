@@ -446,3 +446,32 @@ async def test_root_redirects_to_console(cc: Client):
     resp = await cc.get("/")
     assert resp.status == 302 and resp.headers["location"] == "/ui"
     assert (await cc.get("/health")).status == 200
+
+
+async def test_built_agent_is_reachable_publicly(cc: Client, capp):
+    """After Forge builds an agent in chat, the visitor (no token) can look it up, chat with it and call it."""
+    sid = (await cc.post("/ui/api/public/chat/start", {"assistant": "forge"})).json["session"]["id"]
+    send = lambda text: cc.post("/ui/api/public/chat/send", {"session_id": sid, "text": text})
+    capp.llm.route_choices = [1]  # router -> discover
+    capp.llm.chat_script = [calls(tc("save_draft", values={"business_name": "Sunrise Dental", "template": "receptionist"})),
+                            say("What should the agent be called?")]
+    await send("Build an agent for Sunrise Dental")
+    capp.llm.route_choices = [2]  # discover -> design
+    rest = {k: v for k, v in SUNRISE.items() if k not in ("business_name", "template")}
+    capp.llm.chat_script = [calls(tc("save_draft", values=rest), tc("check_draft")), say("Shall I build it?")]
+    await send("Sam, friendly, warm, here are the facts")
+    capp.llm.route_choices = [1]  # review -> build
+    capp.llm.chat_script = [calls(tc("build_agent")), say("It's live!")]
+    turn = (await send("Yes, build it")).json
+    v = turn["session"]["vars"]
+    assert v["build_status"] == "ready" and v["built_agent_key"].startswith("ag"), v
+    key = v["built_agent_key"]
+    info = (await cc.get(f"/ui/api/public/agent/{key}")).json
+    assert info["assistant_id"] and info["status"] == "active" and "owner" not in info
+    assert (await cc.get(f"/ui/api/public/flow/{key}")).json["flow"]["start_node_id"] == "greet"
+    chat = (await cc.post("/ui/api/public/chat/start", {"assistant": key})).json
+    assert chat["events"][1]["text"].startswith("Hi, thanks for calling Sunrise Dental")
+    payload = capp.telnyx.assistants[info["assistant_id"]]
+    assert payload["telephony_settings"]["supports_unauthenticated_web_calls"] is True
+    page = await cc.get("/call")
+    assert 'id="call-custom"' in page.text and "params.get(\"agent\")" in page.text
