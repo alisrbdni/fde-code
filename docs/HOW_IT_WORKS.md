@@ -61,7 +61,7 @@ sequenceDiagram
   end
   S-->>A: callCount, hasDraft, activeAgents, unread…
   A-->>T: {"dynamic_variables": {welcome_line, quota_remaining, builds_enabled, has_draft, …}}
-  Note over T: welcome speak node reads {{welcome_line}};<br/>router's comparison edges read builds_enabled / quota_remaining
+  Note over T: welcome speak node reads welcome_line,<br/>router's comparison edges read builds_enabled and quota_remaining
 ```
 
 If KV or the actor fails, the webhook still answers 200 with defaults and `degraded=true`. The call carries on, and
@@ -155,7 +155,7 @@ sequenceDiagram
   participant Pat as ClinicPatient (per phone)
   P->>C: "My knee hurts when I run"
   C->>A: triage_symptoms (webhook)
-  Note over A: rules decide urgency (crisis > emergency > urgent > routine);<br/>an LLM may only pick a specialty from a closed enum
+  Note over A: rules decide urgency (crisis, emergency, urgent, routine),<br/>an LLM may only pick a specialty from a closed enum
   A-->>C: triage_urgency=routine, matched_specialty=orthopedics
   Note over C: comparison edge triage_urgency == routine → schedule<br/>(== emergency → 911 speak node)
   C->>A: check_availability (MCP) → generate slots − Sch.taken()
