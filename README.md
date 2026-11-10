@@ -21,7 +21,7 @@ Function (`forge-state`) hosting six **Stateful Actors**. The project was built 
 | **A sample agent Forge already built** ("Mia - Harbor Physio", rebuilt automatically when it expires) | console → **Agents** → ⭐ Mia: talk to it, or **📞 Call it in the browser** |
 | Call Forge by phone | **Pending**: number `+61 7 4285 4682` is awaiting Telnyx's Australian regulatory approval ([details](#getting-a-phone-number)) |
 | **Call in your browser** (real voice call to the Telnyx assistants over WebRTC, no phone needed) | https://forge-api-3cb24047-7.telnyxcompute.com/call |
-| Call Clara by phone | **Pending**: same as above |
+| Call Clara by phone | **Pending**: number `+61 7 4285 4682` is awaiting Telnyx's Australian regulatory approval |
 | Assistants on Telnyx | Forge `assistant-61126c7a-f78d-4711-b706-bfe846e2e616` · Clara `assistant-7006f7c6-203d-47e0-a3f1-2890acb8c98b` |
 | API docs | https://forge-api-3cb24047-7.telnyxcompute.com/docs (OpenAPI: [/openapi.json](https://forge-api-3cb24047-7.telnyxcompute.com/openapi.json)) |
 | Health (public) | https://forge-api-3cb24047-7.telnyxcompute.com/ops/health |
