@@ -392,6 +392,8 @@ class Function:
         p, m, s = req.path, req.method, app.settings
         name = trace.route
 
+        if p == "/" and m == "GET":  # the root opens the console; health stays at /health
+            return Response(302, b"", {"location": "/ui", "content-type": "text/plain"})
         if name == "health" and m == "GET":
             return Response(200, {"ok": True, "service": s.service_name, "dry_run": s.dry_run})
 

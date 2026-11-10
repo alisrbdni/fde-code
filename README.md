@@ -17,9 +17,9 @@ Function (`forge-state`) hosting six **Stateful Actors**. The project was built 
 
 | What | Where |
 |---|---|
-| **Call in your browser** (real voice call to the Telnyx assistants over WebRTC, no phone needed) | https://forge-api-3cb24047-7.telnyxcompute.com/call |
 | **Chat in your browser** (no login: Forge and Clara tabs; the 🎙 Voice button speaks and listens) | https://forge-api-3cb24047-7.telnyxcompute.com/ui |
 | Call Forge by phone | **Pending**: number `+61 7 4285 4682` is awaiting Telnyx's Australian regulatory approval ([details](#getting-a-phone-number)) |
+| **Call in your browser** (real voice call to the Telnyx assistants over WebRTC, no phone needed) | https://forge-api-3cb24047-7.telnyxcompute.com/call |
 | Call Clara by phone | **Pending**: same as above |
 | Assistants on Telnyx | Forge `assistant-61126c7a-f78d-4711-b706-bfe846e2e616` · Clara `assistant-7006f7c6-203d-47e0-a3f1-2890acb8c98b` |
 | API docs | https://forge-api-3cb24047-7.telnyxcompute.com/docs (OpenAPI: [/openapi.json](https://forge-api-3cb24047-7.telnyxcompute.com/openapi.json)) |
@@ -84,12 +84,12 @@ Calling the **Clara** number directly:
 - *"Can I cancel my appointment?"*, *"What are your hours?"*, *"Can I talk to a person?"*.
 - Call back later: she greets you by name and mentions your next appointment.
 
-### Without a phone: browser call, or the console
+### Without a phone: the console, or a browser call
+- **[/ui](https://forge-api-3cb24047-7.telnyxcompute.com/ui):** type to Forge or Clara with no login (the public demo
+  chat), or press **🎙 Voice** to speak and hear the replies (browser speech; Chrome, Edge or Safari).
 - **[/call](https://forge-api-3cb24047-7.telnyxcompute.com/call):** press *Start call with Forge* (or Clara), allow the
   microphone, and talk. This is a real call to the deployed Telnyx assistant, the same workflow, MCP tools and
   webhooks as a phone call.
-- **[/ui](https://forge-api-3cb24047-7.telnyxcompute.com/ui):** type to Forge or Clara with no login (the public demo
-  chat), or press **🎙 Voice** to speak and hear the replies (browser speech; Chrome, Edge or Safari).
 
 For everything else in the console, go to **Settings** and paste the admin token (`ADMIN_TOKEN` from `.env`, not
 the Telnyx API key; the console tells you if you paste the wrong one), then:

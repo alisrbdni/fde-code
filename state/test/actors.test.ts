@@ -184,7 +184,7 @@ test("alarm: posts due jobs, applies results, expire job remains, ops records al
   assert.equal(job.type, "test_call")
   assert.equal(job.agentKey, "ag11111111")
   assert.equal(mock.seen[0].headers["x-trace-id"], "trace-alarm-1")
-  const profile: any = await env.BUILDER.rawStorage(OWNER).get("profile")
+  const profile: any = await env.BUILDER.rawStorage(actorId(OWNER)).get("profile")
   const remaining = profile.jobs.filter((j: any) => j.type === "expire")
   assert.equal(remaining.length, 1, "expire job remains after the test call ran")
   // shared OpsMetrics through the binding
@@ -204,11 +204,11 @@ test("alarm: failed delivery requeues with backoff", async () => {
   await buildOnce(env, OWNER, "ag11111111")
   const past = Date.now() - 20000
   await b.requestTestCall(null, 1000, 3, past, "trace-alarm-2")
-  const profileBefore: any = await env.BUILDER.rawStorage(OWNER).get("profile")
+  const profileBefore: any = await env.BUILDER.rawStorage(actorId(OWNER)).get("profile")
   assert.equal(profileBefore.jobs.length, 2)
   await fireAlarmNow([env.BUILDER], true)
   await new Promise((resolve) => setTimeout(resolve, 30))
-  const profileAfter: any = await env.BUILDER.rawStorage(OWNER).get("profile")
+  const profileAfter: any = await env.BUILDER.rawStorage(actorId(OWNER)).get("profile")
   const requeued = profileAfter.jobs.filter((j: any) => j.type === "test_call")
   assert.equal(requeued.length, 1, "failed job is requeued")
   assert.equal(requeued[0].attempts, 1)

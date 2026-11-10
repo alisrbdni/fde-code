@@ -440,3 +440,9 @@ async def test_rest_kv_retries_once_on_5xx(monkeypatch):
     monkeypatch.setattr(kvmod, "request", flaky)
     monkeypatch.setattr(kvmod.RestKV, "RETRY_DELAY", 0)
     assert await kvmod.RestKV("https://x/kvs", "ns", "K").get("a/b") == "v" and calls == ["GET", "GET"]
+
+
+async def test_root_redirects_to_console(cc: Client):
+    resp = await cc.get("/")
+    assert resp.status == 302 and resp.headers["location"] == "/ui"
+    assert (await cc.get("/health")).status == 200
