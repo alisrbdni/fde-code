@@ -615,14 +615,38 @@ def _trim(s: Dict[str, Any]) -> None:
 # persistence and views
 # ---------------------------------------------------------------------------
 
+def _memo(app: Any) -> Dict[str, Any]:
+    """Per-instance copy of recent sessions. KV stays the shared store (another instance can pick a chat up),
+    but a KV hiccup must not lose the conversation or fail the turn."""
+    memo = getattr(app, "_session_memo", None)
+    if memo is None:
+        memo = app._session_memo = {}
+    return memo
+
+
 async def save(app: Any, s: Dict[str, Any]) -> None:
-    await app.kv.put(f"session/chat/{s['id']}", json.dumps(s, default=str), ttl_secs=SESSION_TTL)
+    raw = json.dumps(s, default=str)
+    memo = _memo(app)
+    memo[s["id"]] = (time.monotonic(), raw)
+    if len(memo) > 300:
+        memo.pop(next(iter(memo)))
+    try:
+        await app.kv.put(f"session/chat/{s['id']}", raw, ttl_secs=SESSION_TTL)
+    except Exception as exc:  # kept in memory; the turn still succeeds
+        log("warn", "sim.session_save_failed", session=s["id"], error=str(exc)[:160])
 
 
 async def load(app: Any, session_id: str) -> Dict[str, Any]:
     if not session_id or not all(c in "0123456789abcdef" for c in session_id) or len(session_id) != 12:
         raise SimError(400, "bad session id")
-    raw = await app.kv.get(f"session/chat/{session_id}")
+    hit = _memo(app).get(session_id)
+    if hit and time.monotonic() - hit[0] < SESSION_TTL:
+        return json.loads(hit[1])
+    try:
+        raw = await app.kv.get(f"session/chat/{session_id}")
+    except Exception as exc:
+        log("warn", "sim.session_load_failed", session=session_id, error=str(exc)[:160])
+        raise SimError(503, "the session store is briefly unavailable; please send that again") from exc
     if raw is None:
         raise SimError(404, "session not found or expired")
     return json.loads(raw)

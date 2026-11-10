@@ -45,9 +45,21 @@ class RestKV(KVBackend):
     def _headers(self) -> Dict[str, str]:
         return {"authorization": f"Bearer {self.api_key}", "content-type": "application/json"}
 
+    RETRY_DELAY = 0.4
+
+    async def _send(self, method: str, url: str, **kw: Any) -> HttpResponse:
+        """One retry on a 5xx or network error: Telnyx KV REST returns occasional 500 "Unexpected error"
+        (code 10007) that succeed on the next attempt."""
+        resp: HttpResponse = await request(method, url, **kw)
+        if resp.status == 0 or resp.status >= 500:
+            log("warn", "kv.retry", method=method, status=resp.status, detail=resp.text[:120])
+            await asyncio.sleep(self.RETRY_DELAY)
+            resp = await request(method, url, **kw)
+        return resp
+
     async def get(self, key: str) -> Optional[str]:
         url = join_url(self.base, "keys", quote_key(key))
-        resp: HttpResponse = await request("GET", url, headers=self._headers)
+        resp: HttpResponse = await self._send("GET", url, headers=self._headers)
         if resp.status == 404:
             return None
         if not resp.ok:
@@ -61,13 +73,13 @@ class RestKV(KVBackend):
             url += f"?ttl_secs={int(ttl_secs)}"
         # The KV REST API stores the request body verbatim (no JSON envelope), like the CLI does.
         headers = {**self._headers, "content-type": "text/plain; charset=utf-8"}
-        resp = await request("PUT", url, headers=headers, body=value.encode("utf-8"))
+        resp = await self._send("PUT", url, headers=headers, body=value.encode("utf-8"))
         if not resp.ok:
             raise KVError(f"kv put {key} -> {resp.status} {resp.text[:120]}")
 
     async def delete(self, key: str) -> None:
         url = join_url(self.base, "keys", quote_key(key))
-        resp = await request("DELETE", url, headers=self._headers)
+        resp = await self._send("DELETE", url, headers=self._headers)
         if resp.status == 404 or resp.ok:
             return
         raise KVError(f"kv delete {key} -> {resp.status} {resp.text[:120]}")

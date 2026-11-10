@@ -412,3 +412,31 @@ async def test_call_page_embeds_assistant_ids():
     assert "unpkg.com/@telnyx/ai-agent-widget@0.36.0" in page.text
     assert "https://unpkg.com" in page.headers["content-security-policy"]
     assert page.headers["permissions-policy"] == "microphone=(self)"
+
+
+async def test_chat_survives_kv_errors(cc: Client, capp):
+    """Telnyx KV returns occasional 500s: a chat turn must still succeed and the session must not be lost."""
+    start = await _start(cc, "forge")
+    sid = start["session"]["id"]
+    capp.kv.fail = True  # every KV call now raises
+    capp.llm.chat_script = [say("Still here.")]
+    turn = await _send(cc, sid, "hello?")
+    assert any(e["type"] == "assistant" and e["text"] == "Still here." for e in turn["events"])
+    capp.kv.fail = False
+    again = await cc.get(f"/ui/api/chat/{sid}", headers=AUTH)
+    assert again.status == 200 and len(again.json["events"]) > len(start["events"])
+
+
+async def test_rest_kv_retries_once_on_5xx(monkeypatch):
+    from function import kv as kvmod
+    from function.http import HttpResponse
+
+    calls = []
+
+    async def flaky(method, url, headers=None, body=None, timeout=10):
+        calls.append(method)
+        return HttpResponse(500, b'{"errors":[{"code":"10007"}]}') if len(calls) == 1 else HttpResponse(200, b"v")
+
+    monkeypatch.setattr(kvmod, "request", flaky)
+    monkeypatch.setattr(kvmod.RestKV, "RETRY_DELAY", 0)
+    assert await kvmod.RestKV("https://x/kvs", "ns", "K").get("a/b") == "v" and calls == ["GET", "GET"]
