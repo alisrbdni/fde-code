@@ -59,11 +59,21 @@ export class MemoryStorage {
     if (typeof at !== "number" || !Number.isFinite(at)) {
       throw new Error(`setAlarm: expected a finite ms-since-epoch number, got ${at}`)
     }
+    this.checkAlarmName()
     this.arm(at)
   }
 
   async deleteAlarm(): Promise<void> {
+    this.checkAlarmName()
     this.arm(null)
+  }
+
+  /** The platform names an actor's alarm reminder after its instance id, which must be an RFC 1123 label. */
+  public actorName = ""
+  private checkAlarmName(): void {
+    if (this.actorName && !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(this.actorName)) {
+      throw new Error(`job name is invalid: actor id ${JSON.stringify(this.actorName)} must be a lowercase RFC 1123 label`)
+    }
   }
 
   async getAlarm(): Promise<number | null> {
@@ -110,6 +120,7 @@ export function actorNamespace<Cls extends new (ctx: ActorCtx, env: any) => any>
     let entry = instances.get(name)
     if (!entry) {
       const storage = new MemoryStorage()
+      storage.actorName = name
       const instance = new Cls({ id: name, storage }, env)
       entry = { instance, queue: Promise.resolve(), storage }
       storage.onAlarm = () => {

@@ -17,9 +17,11 @@ Function (`forge-state`) hosting six **Stateful Actors**. The project was built 
 
 | What | Where |
 |---|---|
-| Call Forge (build an agent by phone) | **Not available yet**: no number purchased ([how to add one](#getting-a-phone-number)). Use the console meanwhile. |
-| Call Clara (Northside Family Clinic) | **Not available yet**: same as above |
-| Console (talk to both over text, see flows, agents, bookings, metrics) | https://forge-api-3cb24047-7.telnyxcompute.com/ui |
+| **Call in your browser** (real voice call to the Telnyx assistants over WebRTC, no phone needed) | https://forge-api-3cb24047-7.telnyxcompute.com/call |
+| **Chat in your browser** (no login: Forge and Clara tabs; the 🎙 Voice button speaks and listens) | https://forge-api-3cb24047-7.telnyxcompute.com/ui |
+| Call Forge by phone | **Pending**: number `+61 7 4285 4682` is awaiting Telnyx's Australian regulatory approval ([details](#getting-a-phone-number)) |
+| Call Clara by phone | **Pending**: same as above |
+| Assistants on Telnyx | Forge `assistant-61126c7a-f78d-4711-b706-bfe846e2e616` · Clara `assistant-7006f7c6-203d-47e0-a3f1-2890acb8c98b` |
 | API docs | https://forge-api-3cb24047-7.telnyxcompute.com/docs (OpenAPI: [/openapi.json](https://forge-api-3cb24047-7.telnyxcompute.com/openapi.json)) |
 | Health (public) | https://forge-api-3cb24047-7.telnyxcompute.com/ops/health |
 | Metrics (admin token) | https://forge-api-3cb24047-7.telnyxcompute.com/ops/metrics?window=5 |
@@ -29,7 +31,8 @@ Function (`forge-state`) hosting six **Stateful Actors**. The project was built 
 | Clara variables webhook | `https://forge-api-3cb24047-7.telnyxcompute.com/clinic/webhook/dynamic-variables` |
 | Actor host (forge-state, RPC is token-protected) | https://forge-state-08d0ac2c-f.telnyxcompute.com/health |
 
-Tokens for the protected routes are shared on request; they're not in the repo.
+Tokens for the protected routes are shared on request; they're not in the repo. The public chat and the browser
+call need none: each public chat gets its own demo caller number, so visitors only ever see their own conversation.
 
 ### See inside the deployment
 | What | Where |
@@ -49,16 +52,15 @@ to keep them warm. It doubles as the uptime check, because a failing `/ops/healt
 emails you. A ship also replaces the running containers, so expect a brief blip right after a deploy.
 
 ### Getting a phone number
-The functions are deployed, but the Telnyx account has no phone numbers yet (a number is bought, it doesn't come
-free), so the phone flows can't be called. Until then, everything below works in the console. To enable calling:
-1. **Add credit:** Portal → **Billing** (use promo code , or a few dollars; a number is
-   about $1–2 a month).
-2. **Buy numbers:** Portal → **Numbers → Search & Buy**: one for Forge, one for Clara, and one that generated
-   agents call owners back from. Pick the country your testers are in to avoid international call charges.
-3. **Create a TeXML application** (Portal → **Voice → TeXML Applications**) and assign the callback number to it.
-4. **Wire them up:** `./deployment.sh telephony assistants smoke` asks for the TeXML app id and the numbers,
-   creates both assistants on Telnyx and runs a live test call. Then assign each number to its assistant in the
-   Portal ([assistant/README.md](assistant/README.md)) and put the numbers in the table above.
+The assistants are created and answer browser calls already. For phone calls, the Australian number
+`+61 7 4285 4682` has been bought but is **`requirement-info-pending`**: Telnyx requires regulatory documents
+(identity and address) for Australian numbers before they can carry calls.
+1. Portal → **Numbers → My Numbers** → the number → **Requirements**: upload the requested documents and wait for approval.
+2. Portal → **AI → AI Assistants → Forge → Telephony**: assign the number to Forge (and a second number to Clara).
+   The number is currently attached to another assistant's TeXML app, so move it.
+3. For outbound test calls (an agent calling its owner back), create a TeXML application, assign a callback number to
+   it, then run `./deployment.sh telephony` so `TEXML_APP_ID` and `FORGE_NUMBER` are set.
+4. Put the numbers in the table above.
 
 ### By phone (once the numbers are live)
 1. Call the **Forge** number. You'll hear a short disclosure: Forge is an AI, the call may be recorded, and agents
@@ -82,9 +84,15 @@ Calling the **Clara** number directly:
 - *"Can I cancel my appointment?"*, *"What are your hours?"*, *"Can I talk to a person?"*.
 - Call back later: she greets you by name and mentions your next appointment.
 
-### Without a phone: the console
-Open the [console](https://forge-api-3cb24047-7.telnyxcompute.com/ui), go to **Settings**, paste the admin token,
-then:
+### Without a phone: browser call, or the console
+- **[/call](https://forge-api-3cb24047-7.telnyxcompute.com/call):** press *Start call with Forge* (or Clara), allow the
+  microphone, and talk. This is a real call to the deployed Telnyx assistant, the same workflow, MCP tools and
+  webhooks as a phone call.
+- **[/ui](https://forge-api-3cb24047-7.telnyxcompute.com/ui):** type to Forge or Clara with no login (the public demo
+  chat), or press **🎙 Voice** to speak and hear the replies (browser speech; Chrome, Edge or Safari).
+
+For everything else in the console, go to **Settings** and paste the admin token (`ADMIN_TOKEN` from `.env`, not
+the Telnyx API key; the console tells you if you paste the wrong one), then:
 - **Forge** tab: type the same conversation as above. The workflow diagram highlights the current node, the
   variables panel shows what changed, and each tool call expands to show its arguments and result. You can also
   build an agent from the form below the chat.

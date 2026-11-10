@@ -7,7 +7,7 @@ import { OpsMetrics } from "./actors/ops-metrics"
 import { AgentRegistry } from "./actors/agent-registry"
 import { ClinicSchedule, ClinicPatient, ClinicDesk } from "./actors/clinic"
 import { log } from "./log"
-import { setting } from "./config"
+import { actorId, setting } from "./config"
 
 // Actor classes are exported from the entry, where telnyx.toml's [[actors]] `type` names them.
 export { BuilderProfile, OpsMetrics, AgentRegistry, ClinicSchedule, ClinicPatient, ClinicDesk }
@@ -113,7 +113,7 @@ export default {
     const args = Array.isArray(body.args) ? body.args : []
     try {
       const namespace = (env as any)[spec.binding] as any
-      const instance = namespace.idFromName(String(body.name))
+      const instance = namespace.idFromName(actorId(String(body.name)))
       const result = await (instance as any)[method](...args)
       const ms = Date.now() - started
       log("info", "rpc.ok", { trace_id: traceId, actor: body.actor, name: body.name, method, ms })

@@ -5,7 +5,7 @@
  * due jobs to the API's /internal/jobs endpoint.
  */
 import { StatefulActor } from "@telnyx/edge-runtime"
-import { setting } from "../config"
+import { actorId, setting } from "../config"
 import { log } from "../log"
 
 export interface Job {
@@ -458,7 +458,7 @@ export class BuilderProfile extends StatefulActor {
     await this.save(await this.load())
     const ms = Date.now() - started
     try {
-      await this.env.OPS.idFromName("global").record("alarm", outcome, ms, Date.now(), jobs[0].traceId || "", errorText)
+      await this.env.OPS.idFromName(actorId("global")).record("alarm", outcome, ms, Date.now(), jobs[0].traceId || "", errorText)
     } catch (exc: any) {
       log("warn", "alarm.ops_record_failed", { error: String(exc && exc.message ? exc.message : exc) })
     }

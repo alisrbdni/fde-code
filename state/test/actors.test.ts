@@ -7,12 +7,13 @@ import http from "node:http"
 import { makeEnv, type LocalEnv } from "../local/env"
 import { fireAlarmNow } from "../local/edge-runtime-shim"
 import handler from "../src/index"
+import { actorId } from "../src/config"
 
 const OWNER = "+15550102001"
 const NOW = Date.now()
 
 function builder(env: LocalEnv, owner = OWNER) {
-  return env.BUILDER.idFromName(owner)
+  return env.BUILDER.idFromName(actorId(owner))
 }
 
 async function fillDraft(env: LocalEnv, owner = OWNER, fields: Record<string, any> = {}) {
@@ -187,7 +188,7 @@ test("alarm: posts due jobs, applies results, expire job remains, ops records al
   const remaining = profile.jobs.filter((j: any) => j.type === "expire")
   assert.equal(remaining.length, 1, "expire job remains after the test call ran")
   // shared OpsMetrics through the binding
-  const ops = env.OPS.idFromName("global")
+  const ops = env.OPS.idFromName(actorId("global"))
   const snap: any = await ops.snapshot(10, Date.now())
   assert.equal(snap.by_route.alarm.count, 1)
   mock.server.close()
@@ -228,7 +229,7 @@ test("builder: 10 concurrent messages all land", async () => {
 
 test("ops: metrics aggregate", async () => {
   const env = makeEnv()
-  const ops = env.OPS.idFromName("global")
+  const ops = env.OPS.idFromName(actorId("global"))
   const now = Date.now()
   await ops.record("forge_variables", "ok", 20, now, "t1")
   await ops.record("forge_variables", "ok", 40, now, "t2")
@@ -297,7 +298,7 @@ test("gateway: exposes clinic and registry actors", async () => {
 
 test("clinic schedule: concurrent booking of the same slot - one wins", async () => {
   const env = makeEnv()
-  const s = env.SCHEDULE.idFromName("fm-okafor")
+  const s = env.SCHEDULE.idFromName(actorId("fm-okafor"))
   const slot = "2026-11-10T09:30"
   const nowSlot = "2026-11-07T10:00"
   const two = await Promise.all([
@@ -310,7 +311,7 @@ test("clinic schedule: concurrent booking of the same slot - one wins", async ()
 
 test("clinic schedule: duplicate, past, cancel ownership", async () => {
   const env = makeEnv()
-  const s = env.SCHEDULE.idFromName("derm-raman")
+  const s = env.SCHEDULE.idFromName(actorId("derm-raman"))
   const nowSlot = "2026-11-07T10:00"
   const past = await s.book("2026-11-06T15:00", { id: "ap0", patient: "+15550000001" }, nowSlot, NOW)
   assert.equal((past as any).reason, "past")
@@ -329,7 +330,7 @@ test("clinic schedule: duplicate, past, cancel ownership", async () => {
 
 test("clinic patient: binding, limit, cancel", async () => {
   const env = makeEnv()
-  const p = env.PATIENT.idFromName("+15550000001")
+  const p = env.PATIENT.idFromName(actorId("+15550000001"))
   const unknown = await p.callInfo("call-x")
   assert.equal((unknown as any).known, false)
   const start: any = await p.startCall("+15550000001", "call-1", true, "2026-11-07T10:00", NOW)
@@ -349,8 +350,8 @@ test("clinic patient: binding, limit, cancel", async () => {
 
 test("registry + desk: concurrent writes land", async () => {
   const env = makeEnv()
-  const reg = env.REGISTRY.idFromName("global")
-  const desk = env.DESK.idFromName("global")
+  const reg = env.REGISTRY.idFromName(actorId("global"))
+  const desk = env.DESK.idFromName(actorId("global"))
   await Promise.all(
     Array.from({ length: 20 }, (_, i) => reg.upsert({ key: "reg" + i, name: "Agent " + i, status: "active" }, NOW)),
   )
@@ -365,7 +366,7 @@ test("registry + desk: concurrent writes land", async () => {
 
 test("registry: upsert merges, keeps createdAt, builds++", async () => {
   const env = makeEnv()
-  const reg = env.REGISTRY.idFromName("global")
+  const reg = env.REGISTRY.idFromName(actorId("global"))
   const first: any = await reg.upsert({ key: "ag11111111", name: "Sam", status: "active" }, NOW)
   const created = first.agent.createdAt
   const second: any = await reg.upsert({ key: "ag11111111", name: "Sammy", status: "active" }, NOW + 100)
@@ -376,4 +377,18 @@ test("registry: upsert merges, keeps createdAt, builds++", async () => {
   assert.equal(status.agent.status, "deleting")
   const fetched: any = await reg.get("ag11111111")
   assert.equal(fetched.agent.status, "deleting")
+})
+
+
+test("actor ids: alarm-safe RFC 1123 labels, reversible and collision-free", async () => {
+  const label = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
+  for (const name of ["+15550102001", "global", "fm-okafor", "abc12345/+15550102001", "Foo"]) {
+    assert.match(actorId(name), label, name)
+  }
+  assert.equal(actorId("+15550102001"), "a-2b15550102001")
+  assert.notEqual(actorId("a-b"), actorId("a_b"))
+  // the strict shim rejects an alarm on a raw phone-number id, exactly like the platform
+  const env = makeEnv("t")
+  const raw = env.BUILDER.idFromName("+15550109999")
+  await assert.rejects(raw.saveDraft({ set: { business_name: "X" } }, Date.now()), /RFC 1123/)
 })
