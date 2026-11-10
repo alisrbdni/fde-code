@@ -20,6 +20,8 @@ DEFAULTS: Dict[str, str] = {
     "ASSISTANT_MODEL": "moonshotai/Kimi-K2.6",
     "POLISH_MODEL": "zai-org/GLM-5.3-Flash",
     "CHAT_MODEL": "",
+    # picks the next workflow edge in the console simulator: a small classification, so a fast model
+    "ROUTER_MODEL": "zai-org/GLM-5.3-Flash",
     "LOG_LEVEL": "info",
     "VERIFY_SIGNATURES": "false",
     "SERVICE_NAME": "forge-api",
@@ -119,6 +121,7 @@ class Settings:
     clinic_front_desk_number: str
     clinic_utc_offset: str
     require_tokens: bool = False
+    router_model: str = ""
     forge_assistant_id: str = ""
 
     @property
@@ -200,6 +203,7 @@ def load_settings(overrides: Optional[Dict[str, str]] = None) -> Settings:
         clinic_utc_offset=val("CLINIC_UTC_OFFSET")[0],
         require_tokens=_require_tokens(val("REQUIRE_TOKENS")[0], val("API_URL")[0]),
         forge_assistant_id=val("FORGE_ASSISTANT_ID")[0],
+        router_model=val("ROUTER_MODEL")[0] or chat_model or assistant_model,
     )
     return settings
 

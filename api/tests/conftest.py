@@ -45,6 +45,9 @@ CLEARED = (
     "TELNYX_API_KEY", "KV_NAMESPACE_ID", "STATE_URL", "STATE_TOKEN", "MCP_TOKEN", "ADMIN_TOKEN",
     "STORAGE_ENDPOINT", "STORAGE_ACCESS_KEY", "CLINIC_ASSISTANT_ID", "CLINIC_FRONT_DESK_NUMBER",
     "FORGE_DRY_RUN", "VERIFY_SIGNATURES", "CHAT_MODEL", "REQUIRE_TOKENS", "FORGE_ASSISTANT_ID",
+    # everything else the app reads, so a developer's loaded .env can't change test results
+    "ASSISTANT_MODEL", "POLISH_MODEL", "ROUTER_MODEL", "TELNYX_API_BASE", "KV_BASE_URL", "STORAGE_BUCKET",
+    "STORAGE_REGION", "STORAGE_SECRET_KEY", "CLINIC_UTC_OFFSET", "TELNYX_PUBLIC_KEY", "LOG_LEVEL", "OWNER_PHONE",
 )
 
 local_only = pytest.mark.skipif(REMOTE, reason="uses the emulator's alarm internals (local only)")

@@ -7,7 +7,7 @@
 [edge_compute]
 func_id = "3cb24047-7dfa-43c7-af2c-d67ac47c0bb4"
 func_name = "forge-api"
-timeout_seconds = 30
+timeout_seconds = 120
 
 # Non-secret configuration, read as process environment variables.
 [env_vars]
@@ -19,6 +19,7 @@ FORGE_NUMBER = "+61742854682"
 ASSISTANT_MODEL = "moonshotai/Kimi-K2.6"
 POLISH_MODEL = "zai-org/GLM-5.3-Flash"
 CHAT_MODEL = ""
+ROUTER_MODEL = "zai-org/GLM-5.3-Flash"
 LOG_LEVEL = "info"
 VERIFY_SIGNATURES = "false"
 TELNYX_PUBLIC_KEY = ""

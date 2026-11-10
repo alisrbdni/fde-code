@@ -479,7 +479,8 @@ class Engine:
                   "required": ["choice"], "additionalProperties": False}
         try:
             async with self.trace.span("llm.route"):
-                picked = await self.app.llm.chat_json(self.app.settings.chat_model, messages, schema)
+                picked = await self.app.llm.chat_json(self.app.settings.router_model or self.app.settings.chat_model,
+                                                      messages, schema)
             choice = int((picked or {}).get("choice") or 0)
         except Exception as exc:
             log("warn", "sim.route_failed", error=str(exc)[:160])
