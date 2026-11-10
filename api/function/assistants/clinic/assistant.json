@@ -32,22 +32,30 @@
   },
   "tools": [
     {
-      "name": "triage_symptoms",
       "type": "webhook",
+      "name": "triage_symptoms",
       "webhook": {
+        "name": "triage_symptoms",
         "description": "Decide who the caller should see and how soon, from their own words. Urgency comes from rules.",
         "url": "${API_URL}/clinic/tools/triage",
         "method": "POST",
-        "headers": {
-          "Authorization": "Bearer ${MCP_TOKEN}"
-        },
-        "body": {
-          "caller_phone": "{{telnyx_end_user_target}}",
-          "call_id": "{{call_control_id}}"
-        },
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": "Bearer ${MCP_TOKEN}"
+          }
+        ],
         "body_parameters": {
           "type": "object",
           "properties": {
+            "caller_phone": {
+              "type": "string",
+              "description": "Always {{telnyx_end_user_target}}: the caller's own number."
+            },
+            "call_id": {
+              "type": "string",
+              "description": "Always {{call_control_id}}: identifies this call."
+            },
             "symptoms": {
               "type": "string",
               "description": "What the caller described, in their own words."
@@ -62,28 +70,38 @@
             }
           },
           "required": [
+            "caller_phone",
+            "call_id",
             "symptoms"
           ]
         }
       }
     },
     {
-      "name": "book_appointment",
       "type": "webhook",
+      "name": "book_appointment",
       "webhook": {
+        "name": "book_appointment",
         "description": "Book one of the options from check_availability with its slot_id and the patient's full name.",
         "url": "${API_URL}/clinic/tools/book",
         "method": "POST",
-        "headers": {
-          "Authorization": "Bearer ${MCP_TOKEN}"
-        },
-        "body": {
-          "caller_phone": "{{telnyx_end_user_target}}",
-          "call_id": "{{call_control_id}}"
-        },
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": "Bearer ${MCP_TOKEN}"
+          }
+        ],
         "body_parameters": {
           "type": "object",
           "properties": {
+            "caller_phone": {
+              "type": "string",
+              "description": "Always {{telnyx_end_user_target}}: the caller's own number."
+            },
+            "call_id": {
+              "type": "string",
+              "description": "Always {{call_control_id}}: identifies this call."
+            },
             "slot_id": {
               "type": "string",
               "description": "The option's slot_id from check_availability."
@@ -105,6 +123,8 @@
             }
           },
           "required": [
+            "caller_phone",
+            "call_id",
             "slot_id",
             "full_name"
           ]
@@ -112,16 +132,24 @@
       }
     },
     {
-      "name": "transfer",
       "type": "transfer",
+      "name": "transfer",
       "transfer": {
-        "from": "${FORGE_NUMBER}",
-        "destination": "${CLINIC_FRONT_DESK_NUMBER}"
+        "targets": [
+          {
+            "name": "Front desk",
+            "to": "${CLINIC_FRONT_DESK_NUMBER}"
+          }
+        ],
+        "from": "{{telnyx_agent_target}}"
       }
     },
     {
+      "type": "hangup",
       "name": "hangup",
-      "type": "hangup"
+      "hangup": {
+        "description": "End the call once the conversation is over and the caller has said goodbye."
+      }
     }
   ],
   "conversation_flow": "@conversation_flow.json"

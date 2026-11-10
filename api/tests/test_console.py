@@ -109,7 +109,7 @@ async def test_forge_chat_builds_an_agent_end_to_end(cc: Client, capp):
     detail = (await cc.get(f"/ui/api/agents/{agent['key']}", headers=AUTH)).json
     archive = detail["archive"]
     auth = next(t for t in archive["payload"]["tools"] if t["name"] == "take_message")["webhook"]["headers"]
-    assert auth == {"Authorization": "Bearer <redacted>"}
+    assert auth == [{"name": "Authorization", "value": "Bearer <redacted>"}]
     assert any(s["name"] == "telnyx.create_assistant" for s in archive["spans"])
     assert detail["versions"] == [f"forge/builds/{agent['key']}/latest.json", f"forge/builds/{agent['key']}/v1.json"]
 

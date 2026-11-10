@@ -85,7 +85,8 @@ PY
 sync_api_toml() {
   local k
   for k in API_URL STATE_URL KV_NAMESPACE_ID TEXML_APP_ID FORGE_NUMBER ASSISTANT_MODEL POLISH_MODEL CHAT_MODEL \
-           STORAGE_ENDPOINT STORAGE_BUCKET STORAGE_REGION CLINIC_ASSISTANT_ID CLINIC_FRONT_DESK_NUMBER CLINIC_UTC_OFFSET; do
+           STORAGE_ENDPOINT STORAGE_BUCKET STORAGE_REGION CLINIC_ASSISTANT_ID CLINIC_FRONT_DESK_NUMBER CLINIC_UTC_OFFSET \
+           FORGE_ASSISTANT_ID REQUIRE_TOKENS; do
     [[ -n "${!k:-}" ]] || continue
     # never copy a local URL (http://localhost...) into the deployed manifest
     [[ "$k" == API_URL || "$k" == STATE_URL ]] && [[ "${!k}" != https://* ]] && continue
@@ -147,6 +148,13 @@ step_apikey() {
   local var model
   for var in ASSISTANT_MODEL POLISH_MODEL; do
     model="${!var:-}"
+    # Assistants (Forge, Clara and every generated agent) only accept models flagged recommended_for_assistants.
+    if [[ "$var" == ASSISTANT_MODEL && -n "$model" ]] && ! python3 -c 'import json,sys; m=sys.argv[1]; sys.exit(0 if any(x["id"]==m and x.get("recommended_for_assistants") for x in json.load(sys.stdin)["data"]) else 1)' "$model" <<<"$models"; then
+      warn "$var=$model can't be used by AI Assistants. Assistant-capable models:"
+      python3 -c 'import json,sys; print("\n".join("      "+m["id"] for m in json.load(sys.stdin)["data"] if m.get("recommended_for_assistants")))' <<<"$models"
+      local pick2; ask pick2 "Model to use for $var" "moonshotai/Kimi-K2.6"
+      set_env "$var" "$pick2"; continue
+    fi
     if [[ -n "$model" ]] && ! grep -q "\"$model\"" <<<"$models"; then
       warn "$var=$model is not available on this account. Some that are:"
       python3 -c 'import json,sys; print("\n".join("      "+m["id"] for m in json.load(sys.stdin)["data"]))' <<<"$models" | head -20

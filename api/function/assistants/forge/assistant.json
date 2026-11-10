@@ -35,32 +35,68 @@
   },
   "tools": [
     {
-      "name": "check_draft",
       "type": "webhook",
+      "name": "check_draft",
       "webhook": {
+        "name": "check_draft",
+        "description": "Check whether the caller's saved draft is complete and allowed to be built. Read its message.",
         "url": "${API_URL}/tools/check-draft",
         "method": "POST",
-        "headers": {
-          "Authorization": "Bearer ${MCP_TOKEN}"
-        },
-        "body": {
-          "caller_phone": "{{telnyx_end_user_target}}",
-          "call_id": "{{call_control_id}}"
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": "Bearer ${MCP_TOKEN}"
+          }
+        ],
+        "body_parameters": {
+          "type": "object",
+          "properties": {
+            "caller_phone": {
+              "type": "string",
+              "description": "Always {{telnyx_end_user_target}}: the caller's own number."
+            },
+            "call_id": {
+              "type": "string",
+              "description": "Always {{call_control_id}}: identifies this call."
+            }
+          },
+          "required": [
+            "caller_phone",
+            "call_id"
+          ]
         }
       }
     },
     {
-      "name": "build_agent",
       "type": "webhook",
+      "name": "build_agent",
       "webhook": {
+        "name": "build_agent",
+        "description": "Build the agent from the saved draft. Call it exactly once, after the caller confirms.",
         "url": "${API_URL}/tools/build-agent",
         "method": "POST",
-        "headers": {
-          "Authorization": "Bearer ${MCP_TOKEN}"
-        },
-        "body": {
-          "caller_phone": "{{telnyx_end_user_target}}",
-          "call_id": "{{call_control_id}}"
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": "Bearer ${MCP_TOKEN}"
+          }
+        ],
+        "body_parameters": {
+          "type": "object",
+          "properties": {
+            "caller_phone": {
+              "type": "string",
+              "description": "Always {{telnyx_end_user_target}}: the caller's own number."
+            },
+            "call_id": {
+              "type": "string",
+              "description": "Always {{call_control_id}}: identifies this call."
+            }
+          },
+          "required": [
+            "caller_phone",
+            "call_id"
+          ]
         }
       }
     },
@@ -74,12 +110,16 @@
             "name": "Clara"
           }
         ],
-        "voice_mode": "distinct"
+        "voice_mode": "distinct",
+        "description": "Hand a patient or medical caller over to Clara at Northside Family Clinic."
       }
     },
     {
+      "type": "hangup",
       "name": "hangup",
-      "type": "hangup"
+      "hangup": {
+        "description": "End the call once the conversation is over and the caller has said goodbye."
+      }
     }
   ],
   "conversation_flow": "@conversation_flow.json"

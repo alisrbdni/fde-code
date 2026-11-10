@@ -60,7 +60,7 @@
       "id": "clinic_handoff",
       "name": "Hand off to the clinic (Clara)",
       "type": "prompt",
-      "instructions": "Say one short sentence: you are Forge, an agent builder, and Clara at Northside Family Clinic can book or change medical appointments. If the caller agrees, use the handoff tool. Never give medical advice.",
+      "instructions": "Say one short sentence: you are Forge, an agent builder, and Clara at Northside Family Clinic can book or change medical appointments. If the caller agrees, tell them you are connecting them to Clara now (use the handoff tool if one is available). Never give medical advice.",
       "instructions_mode": "append"
     },
     {

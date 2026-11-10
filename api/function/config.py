@@ -17,7 +17,7 @@ DEFAULTS: Dict[str, str] = {
     "TELNYX_API_BASE": "https://api.telnyx.com/v2",
     "KV_BASE_URL": "https://api.telnyx.com/v2/storage/kvs",
     "API_URL": "http://localhost:8080",
-    "ASSISTANT_MODEL": "moonshotai/Kimi-K3",
+    "ASSISTANT_MODEL": "moonshotai/Kimi-K2.6",
     "POLISH_MODEL": "zai-org/GLM-5.3-Flash",
     "CHAT_MODEL": "",
     "LOG_LEVEL": "info",

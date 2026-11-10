@@ -286,37 +286,43 @@ def build_flow(fields: Dict[str, Any], greeting: str) -> Dict[str, Any]:
 
 
 def build_tools(fields: Dict[str, Any], key: str, settings: Any) -> List[Dict[str, Any]]:
-    """take_message (authenticated webhook) and hangup; transfer only when the
-    draft has an escalation number AND the platform has a number to call from."""
+    """take_message (authenticated webhook) and hangup; transfer only when the draft has an escalation number.
+
+    Shapes follow the Telnyx Assistants API as it actually accepts them: the webhook's name repeated inside
+    `webhook`, headers as a list of {name, value}, and LLM-filled `body_parameters`.
+    """
     tools: List[Dict[str, Any]] = [
         {
-            "name": "take_message",
             "type": "webhook",
+            "name": "take_message",
             "webhook": {
+                "name": "take_message",
+                "description": "Save the caller's message for the owner, with their name and callback number.",
                 "url": f"{settings.public_api_url}/agents/{key}/tools/take-message",
                 "method": "POST",
-                "description": "Save the caller's message for the owner, with their name and callback number.",
-                "headers": {"Authorization": f"Bearer {agent_token(settings.mcp_token, key)}"},
-                "body": {"call_id": "{{call_control_id}}"},
+                "headers": [{"name": "Authorization", "value": f"Bearer {agent_token(settings.mcp_token, key)}"}],
                 "body_parameters": {
                     "type": "object",
                     "properties": {
                         "caller_name": {"type": "string", "description": "The caller's name."},
                         "callback_number": {"type": "string", "description": "The number to call them back on."},
                         "message": {"type": "string", "description": "The message, in the caller's words."},
+                        "call_id": {"type": "string", "description": "Always {{call_control_id}}."},
                     },
                     "required": ["message"],
                 },
             },
         },
-        {"name": "hangup", "type": "hangup"},
+        {"type": "hangup", "name": "hangup",
+         "hangup": {"description": "End the call once the caller has said goodbye."}},
     ]
-    if fields.get("escalation_number") and settings.forge_number:
+    if fields.get("escalation_number"):
         tools.append(
             {
-                "name": "transfer",
                 "type": "transfer",
-                "transfer": {"destination": fields["escalation_number"]},
+                "name": "transfer",
+                "transfer": {"targets": [{"name": "Owner", "to": fields["escalation_number"]}],
+                             "from": "{{telnyx_agent_target}}"},
             }
         )
     return tools
@@ -340,7 +346,8 @@ def full_payload(
         "telephony_settings": {
             "time_limit_secs": 600,
             "user_idle_timeout_secs": 60,
-            "default_texml_app_id": settings.texml_app_id,
+            # the API rejects an empty id; test calls need it, so it's set once TEXML_APP_ID exists
+            **({"default_texml_app_id": settings.texml_app_id} if settings.texml_app_id else {}),
         },
         "dynamic_variables_webhook_url": f"{settings.public_api_url}/agents/{key}/dynamic-variables",
         "dynamic_variables_webhook_timeout_ms": 2000,

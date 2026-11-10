@@ -522,7 +522,9 @@ class Function:
                 checks["kv"] = {"ok": got == stamp, "mode": app.mode["kv"]}
             except Exception as exc:
                 checks["kv"] = {"ok": False, "error": str(exc)[:160]}
-            app._kv_probe = (time.monotonic(), checks["kv"])
+            # a failure is re-checked after 5 s instead of being served for the full 30 s
+            age = 0.0 if checks["kv"]["ok"] else KV_PROBE_SECS - 5.0
+            app._kv_probe = (time.monotonic() - age, checks["kv"])
         healthy &= bool(checks["kv"]["ok"])
         metrics: Dict[str, Any] = {}
         try:
