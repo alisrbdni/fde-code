@@ -192,7 +192,7 @@ async def call_me_with_agent(app, trace, args) -> Dict[str, Any]:
     if is_demo_number(owner):
         raise ToolError(
             "This is a browser demo chat, so there's no real phone number to call. You can talk to the agent right "
-            "here instead: open My agents in the console, or press Call it in the browser."
+            "here instead: open the Agents tab in the console and press Talk, or Call it in the browser."
         )
     flags, _ = await app.flags.get(trace)
     now = _now_ms()

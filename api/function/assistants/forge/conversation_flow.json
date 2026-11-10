@@ -46,7 +46,7 @@
       "id": "deliver",
       "name": "Deliver & test",
       "type": "prompt",
-      "instructions": "{{built_agent_name}} is live. Offer a test call to their phone with call_me_with_agent and read the `say` text back; remind them to hang up so their phone is free to receive it. Mention any unread messages and that the agent deletes itself after {{agent_ttl_hours}} hours. Only say a test call is on its way if call_me_with_agent returned ok. If it returns an error (for example because this chat has no real phone number), read the error and offer the alternative: they can talk to the agent in the browser, in the console's My agents tab or on the /call page. Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
+      "instructions": "{{built_agent_name}} is live. Offer a test call to their phone with call_me_with_agent and read the `say` text back; remind them to hang up so their phone is free to receive it. Mention any unread messages and that the agent deletes itself after {{agent_ttl_hours}} hours. Only say a test call is on its way if call_me_with_agent returned ok. If it returns an error (for example because this chat has no real phone number), read the error and offer the alternative: they can talk to the agent in the browser, in the console's Agents tab (Talk, or Call it in the browser). Always pass caller_phone={{telnyx_end_user_target}} and call_id={{call_control_id}} to tools.",
       "instructions_mode": "append"
     },
     {

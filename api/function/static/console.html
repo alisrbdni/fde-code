@@ -436,7 +436,9 @@ createChat($('clinic-chat'),{title:'Talk to Clara',phone:'+15550103001',assistan
   if(st.session.vars.booking_status==='confirmed')loadClinic()}});
 async function loadClinicFlow(){if(clinicFlow)return;try{clinicFlow=await api(flowPath('clinic'));renderFlow($('clinic-flow'),clinicFlow.flow,null,n=>nodeInfo($('clinic-node'),clinicFlow,n))}catch(e){}}
 const dayKey=d=>d.toISOString().slice(0,10);
-async function loadClinic(){try{clinicData=await api('clinic');const d=clinicData;
+async function loadClinic(){
+  if(!isAdmin()){for(const id of ['clinic-grid','clinic-bookings','clinic-callbacks','clinic-activity'])clear($(id)).append(h('tr',{},h('td',{class:'muted small'},'The schedule, bookings and desk need the admin token (Settings). The chat above works without it.')));return}
+  try{clinicData=await api('clinic');const d=clinicData;
   $('clinic-flags').textContent='bookings '+(d.flags.bookings_enabled?'on':'paused')+' · window '+d.flags.booking_window_days+' d · notice '+d.flags.min_notice_minutes+' min · desk '+(d.desk_open?'open':'closed');
   const base=new Date(d.today.slice(0,10)+'T00:00:00Z');const days=[];for(let i=0;i<7;i++){const x=new Date(base.getTime()+i*86400000);days.push(dayKey(x))}
   const t=clear($('clinic-grid'));t.append(h('tr',{},h('th',{},'Clinician'),days.map(x=>h('th',{},new Date(x+'T00:00:00Z').toLocaleDateString(undefined,{weekday:'short',day:'numeric',timeZone:'UTC'})))));
