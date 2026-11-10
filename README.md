@@ -18,7 +18,7 @@ Function (`forge-state`) hosting six **Stateful Actors**. The project was built 
 | What | Where |
 |---|---|
 | **Chat in your browser** (no login: Forge and Clara tabs; the 🎙 Voice button speaks and listens) | https://forge-api-3cb24047-7.telnyxcompute.com/ui |
-| **A sample agent Forge already built** ("Mia - Harbor Physio", rebuilt automatically when it expires) | console → **My agents** → ⭐ Mia: chat, or **📞 Call it in the browser** |
+| **A sample agent Forge already built** ("Mia - Harbor Physio", rebuilt automatically when it expires) | console → **Agents** → ⭐ Mia: talk to it, or **📞 Call it in the browser** |
 | Call Forge by phone | **Pending**: number `+61 7 4285 4682` is awaiting Telnyx's Australian regulatory approval ([details](#getting-a-phone-number)) |
 | **Call in your browser** (real voice call to the Telnyx assistants over WebRTC, no phone needed) | https://forge-api-3cb24047-7.telnyxcompute.com/call |
 | Call Clara by phone | **Pending**: same as above |
@@ -128,19 +128,22 @@ expands to show its arguments and result, and the variables panel shows what cha
 **"Talk to it now"**.
 ![Agent built](docs/screenshots/03-forge-built.png)
 
-**4. Talk to the agent you just built** (My agents tab, also no login). It greets callers with its own speak node,
-answers from its facts, and takes a message into the owner's inbox. **📞 Call it in the browser** opens a real
-voice call.
-![Talk to the new agent](docs/screenshots/04-my-agent-chat.png)
+**4. The new agent appears under Agents** (no login): every live agent on the deployment, kept in the
+AgentRegistry actor so it's there across browsers and reloads. ⭐ is the sample Forge rebuilds automatically.
+![Agents](docs/screenshots/04-agents-list.png)
 
-**5. Clara triages and books.** Rules decide urgency, and `triage_urgency` routes the workflow. She offers real
+**5. Talk to it, or call it.** *Talk* chats with the agent through its own workflow (greeting speak node, answers
+from its facts, takes a message into the owner's inbox). **📞 Call it in the browser** opens a real voice call, and
+**📞 Call this number** (admin token) has Telnyx phone any number.
+![Talk to the agent](docs/screenshots/05-agent-talk.png)
+
+**6. Clara triages and books.** Rules decide urgency, and `triage_urgency` routes the workflow. She offers real
 openings from the clinician's schedule actor and books atomically.
-![Clara triage](docs/screenshots/05-clinic-chat.png)
-![Clara booked](docs/screenshots/06-clinic-booked.png)
+![Clara triage](docs/screenshots/06-clinic-chat.png)
+![Clara booked](docs/screenshots/07-clinic-booked.png)
 
-**6. Behind the scenes (admin token).** Every generated agent, with its input, generated instructions, workflow,
-build-trace spans and messages:
-![Agents](docs/screenshots/07-agents-list.png)
+**7. Behind the scenes (admin token).** Each agent's input, generated instructions, workflow, build-trace spans
+and messages:
 ![Build trace](docs/screenshots/08-agent-build-trace.png)
 ![Generated workflow](docs/screenshots/09-agent-workflow.png)
 
@@ -151,7 +154,7 @@ Ops: health checks, traffic, latency, recent errors with trace ids, KV flags, an
 ![Ops](docs/screenshots/11-ops-health-metrics.png)
 ![KV browser](docs/screenshots/12-ops-kv-browser.png)
 
-**7. Call in the browser and the API reference.**
+**8. Call in the browser and the API reference.**
 ![Browser call](docs/screenshots/13-call-in-browser.png)
 ![API docs](docs/screenshots/14-api-docs.png)
 
