@@ -553,6 +553,13 @@ async def _public(app: Any, trace: Any, m: str, sub: str, body: Dict[str, Any], 
                            "expires_at": rec.get("expiresAt")})
     if sub == "samples" and m == "GET":
         return _resp(200, await _samples(app, trace))
+    if sub == "agents" and m == "GET":
+        # every live agent Forge built (server-side registry: persists across browsers), without owners
+        listed = await app.state.call("registry", "global", "list", 200, trace_id=trace.trace_id)
+        now = _ms()
+        live = [a for a in listed.get("agents") or [] if a.get("status") == "active" and int(a.get("expiresAt") or 0) > now]
+        return _resp(200, {"agents": [_public_agent(a) | {"sample": a.get("owner") == SAMPLE_OWNER,
+                                                          "source": a.get("source")} for a in live]})
     engine = simulator.Engine(app, trace)
     if sub == "chat/start" and m == "POST":
         if not _rate_ok(req, "start"):
@@ -707,7 +714,9 @@ SAMPLE_FIELDS = {
               "We treat sports injuries, back pain and post-surgery rehab"],
 }
 SAMPLE_RETRY_SECS = 600.0
-_sample_state: Dict[str, float] = {"last_attempt": 0.0}
+# -inf, not 0.0: time.monotonic() counts from boot, and a fresh Edge container has been up for less than
+# SAMPLE_RETRY_SECS, so 0.0 looked like "attempted recently" before any attempt had happened.
+_sample_state: Dict[str, float] = {"last_attempt": float("-inf")}
 
 
 def _public_agent(rec: Dict[str, Any]) -> Dict[str, Any]:

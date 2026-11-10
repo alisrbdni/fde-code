@@ -509,7 +509,7 @@ async def test_sample_agent_is_built_once_and_reused(cc: Client, capp):
     import asyncio
     from function import ui_api
 
-    ui_api._sample_state["last_attempt"] = 0.0
+    ui_api._sample_state["last_attempt"] = float("-inf")
     first, second = await asyncio.gather(cc.get("/ui/api/public/samples"), cc.get("/ui/api/public/samples"))
     bodies = [first.json, second.json]
     assert sum(1 for b in bodies if b["built_now"]) == 1  # the actor's build lock: one sample, not two
@@ -519,3 +519,20 @@ async def test_sample_agent_is_built_once_and_reused(cc: Client, capp):
     assert "owner" not in again["agents"][0] and again["agents"][0]["assistant_id"]
     chat = (await cc.post("/ui/api/public/chat/start", {"assistant": again["agents"][0]["key"]})).json
     assert "Harbor Physio" in chat["events"][1]["text"]
+
+
+async def test_sample_builds_on_a_freshly_booted_container(cc: Client, capp, monkeypatch):
+    """time.monotonic() is small on a new Edge container; the first visit must still build the sample."""
+    from function import ui_api
+
+    monkeypatch.setattr(ui_api, "_sample_state", {"last_attempt": float("-inf")})
+    monkeypatch.setattr(ui_api.time, "monotonic", lambda: 42.0)  # booted 42 s ago
+    first = (await cc.get("/ui/api/public/samples")).json
+    assert first["built_now"] is True and first["agents"]
+
+
+async def test_public_agents_list_has_no_owners(cc: Client):
+    key = (await cc.build(await cc.ready_draft()))["agent_key"]
+    listed = (await cc.get("/ui/api/public/agents")).json["agents"]
+    (a,) = [x for x in listed if x["key"] == key]
+    assert a["name"] == "Sam - Sunrise Dental" and a["assistant_id"] and "owner" not in a and a["sample"] is False

@@ -82,7 +82,7 @@ svg text{font:12px system-ui,sans-serif}
 <header>
   <h1>Agent Forge</h1>
   <nav id="nav">
-    <a href="#forge" data-tab="forge">Forge</a><a href="#agents" data-tab="agents">Agents</a><a href="#mine" data-tab="mine" id="nav-mine">My agents</a>
+    <a href="#forge" data-tab="forge">Forge</a><a href="#agents" data-tab="agents">Agents</a>
     <a href="#clinic" data-tab="clinic">Clinic</a><a href="#ops" data-tab="ops">Ops</a><a href="#settings" data-tab="settings">Settings</a><a href="/call" target="_blank" rel="noopener">📞 Call in browser</a>
   </nav>
   <div class="chips" id="chips"></div>
@@ -125,30 +125,19 @@ New patient cleanings are 99 dollars</textarea>
   </section>
 
   <section class="tab" id="tab-agents">
-    <div class="card"><h2>Generated agents <button class="ghost" id="agents-refresh">Refresh</button></h2><div class="scroll"><table id="agents-table"></table></div></div>
+    <div class="card"><h2>Agents built by Forge <button class="ghost" id="agents-refresh">Refresh</button></h2>
+      <div class="small muted" style="margin-bottom:6px">Every live agent on this deployment (kept in the AgentRegistry actor, so they stay here across browsers and reloads; each deletes itself after its time to live). ⭐ = the sample Forge rebuilds automatically. Click one to talk to it or call it.</div>
+      <div class="scroll"><table id="agents-table"></table></div></div>
     <div class="card hidden" id="agent-detail" style="margin-top:12px">
       <h2 id="agent-title"></h2>
-      <div class="row" style="margin-bottom:8px"><button id="agent-test">Test call</button><button class="danger" id="agent-delete">Delete</button><span class="small muted" id="agent-msg"></span></div>
-      <div class="subtabs" id="agent-subtabs"></div>
-      <div id="agent-pane"></div>
-    </div>
-  </section>
-
-  <section class="tab" id="tab-mine">
-    <div class="grid chatflow">
-      <div class="grid">
-        <div class="card"><h2>Agents built by Forge</h2>
-          <div class="small muted" style="margin-bottom:6px">⭐ = a sample Forge built on this deployment (rebuilt automatically when it expires). Agents you build in the Forge tab appear here too.</div>
-          <div class="row"><select id="mine-select" style="flex:1 1 220px"></select><a id="mine-call" class="hidden" target="_blank" rel="noopener"><button>📞 Call it in the browser</button></a><button class="ghost" id="mine-forget">Remove from list</button></div>
-          <div class="small muted" id="mine-meta" style="margin-top:6px"></div>
-        </div>
-        <div class="card"><h2>Have it call a phone</h2>
-          <div class="row"><input id="mine-to" placeholder="Your number, e.g. +61 4xx xxx xxx"><button id="mine-dial">📞 Call me</button></div>
-          <div class="small muted" id="mine-dial-msg">Needs the admin token (so the console can't be used to dial strangers) and a Telnyx number set as FORGE_NUMBER.</div>
-        </div>
-        <div class="card" id="mine-chat"></div>
+      <div class="row" style="margin-bottom:6px">
+        <a id="agent-webcall" target="_blank" rel="noopener"><button>📞 Call it in the browser</button></a>
+        <input id="agent-to" placeholder="Phone number, e.g. +61 4xx xxx xxx" style="max-width:240px"><button id="agent-dial">📞 Call this number</button>
+        <button class="ghost admin-only" id="agent-test">Test call to owner</button><button class="danger admin-only" id="agent-delete">Delete</button>
       </div>
-      <div class="card"><h2>Its workflow</h2><div class="flowwrap" id="mine-flow"></div><div class="nodeinfo" id="mine-node"></div></div>
+      <div class="small muted" id="agent-msg">Calling a number needs the admin token (so the console can't be used to dial strangers) and a ready Telnyx number as FORGE_NUMBER.</div>
+      <div class="subtabs" id="agent-subtabs" style="margin-top:8px"></div>
+      <div id="agent-pane"></div>
     </div>
   </section>
 
@@ -245,7 +234,7 @@ async function checkToken(raw,msgEl){
 function flowPath(id){return isAdmin()?'flow/'+id:(id==='forge'||id==='clinic'||/^ag[0-9a-f]{8}$/.test(id))?'public/flow/'+id:null}
 
 /* ---------- tabs ---------- */
-const tabs=['forge','agents','mine','clinic','ops','settings'];let current='forge';const onShow={};
+const tabs=['forge','agents','clinic','ops','settings'];let current='forge';const onShow={};
 function show(){current=(location.hash||'#forge').slice(1);if(!tabs.includes(current))current='forge';
   for(const t of tabs){$('tab-'+t).classList.toggle('on',t===current)}
   for(const a of document.querySelectorAll('nav a'))a.classList.toggle('on',a.dataset.tab===current);
@@ -368,10 +357,10 @@ let forgeFlow=null;
 const forgeChat=createChat($('forge-chat'),{title:'Talk to Forge',phone:'+15550102001',assistant:()=>'forge',onUpdate:st=>{
   forgeFlow=st.flow;renderFlow($('forge-flow'),st.flow.flow,st.session,n=>nodeInfo($('forge-node'),st.flow,n));renderVars($('forge-vars'),st);
   const v=st.session.vars||{};
-  if(v.build_status==='ready'&&v.built_agent_key){const isNew=rememberAgent(v.built_agent_key,v.built_agent_name);
-    if(isNew&&!$('forge-chat').querySelector('[data-built="'+v.built_agent_key+'"]')){
+  if(v.build_status==='ready'&&v.built_agent_key){
+    if(!$('forge-chat').querySelector('[data-built="'+v.built_agent_key+'"]')){
       $('forge-chat').querySelector('.transcript').appendChild(h('div',{class:'banner','data-built':v.built_agent_key},
-        (v.built_agent_name||'Your agent')+' is live. ',h('button',{onclick:()=>openMine(v.built_agent_key)},'Talk to it now →')))}}
+        (v.built_agent_name||'Your agent')+' is live. ',h('button',{onclick:()=>openAgentTab(v.built_agent_key)},'Talk to it or call it →')))}}
   const d=st.session.draft;clear($('forge-draft'));if(d&&Object.keys(d).length)$('forge-draft').append(kv(d));else $('forge-draft').textContent='Empty draft.'}});
 async function loadForgeFlow(){if(forgeFlow)return;try{forgeFlow=await api(flowPath('forge'));renderFlow($('forge-flow'),forgeFlow.flow,null,n=>nodeInfo($('forge-node'),forgeFlow,n));$('forge-flow-meta').textContent=forgeFlow.flow.nodes.length+' nodes · '+forgeFlow.flow.edges.length+' edges'}catch(e){}}
 for(const t of['receptionist','appointments','faq','restaurant','events','lead_intake'])$('fb-template').append(h('option',{},t));
@@ -384,62 +373,59 @@ $('fb-go').onclick=async()=>{$('fb-status').textContent='building...';clear($('f
 function spanBars(spans){const max=Math.max(1,...(spans||[]).map(s=>s.ms||0));return h('table',{},(spans||[]).map(s=>h('tr',{},h('td',{class:'small'},s.name),h('td',{style:'width:55%'},h('div',{class:'bar',style:'width:'+Math.max(1,100*(s.ms||0)/max)+'%;'+(s.ok?'':'background:var(--bad)')})),h('td',{class:'small'},s.ms+' ms'))))}
 onShow.forge=loadForgeFlow;
 
-/* ---------- Agents tab ---------- */
-let agentKey=null,agentData=null,agentSub='Overview',agentChat=null;
-async function loadAgents(){try{const r=await api('agents');const t=clear($('agents-table'));
-  t.append(h('tr',{},['Agent','Business','Owner','Level','Status','Builds','Source','Expires'].map(x=>h('th',{},x))));
-  for(const a of r.agents)t.append(h('tr',{style:'cursor:pointer',onclick:()=>openAgent(a.key)},h('td',{},a.name||a.key,h('div',{class:'small muted'},a.key)),h('td',{},a.business),h('td',{},a.owner),h('td',{},a.level),h('td',{},a.status),h('td',{},a.builds),h('td',{},a.source),h('td',{},fmtTime(a.expiresAt))));
-  if(!r.agents.length)t.append(h('tr',{},h('td',{colspan:8,class:'muted'},'No agents yet. Build one in the Forge tab.')))}catch(e){}}
-async function openAgent(key){agentKey=key;agentData=await api('agents/'+key);$('agent-detail').classList.remove('hidden');$('agent-title').textContent=(agentData.registry.name||key)+' · '+agentData.registry.status;renderAgentTabs()}
-function renderAgentTabs(){const subs=['Overview','Input','Generated','Flow','Build trace','Messages','Chat','Raw'];const box=clear($('agent-subtabs'));
+/* ---------- Agents tab: every agent Forge built, for everyone (owner details only with the admin token) ---------- */
+let agentKey=null,agentData=null,agentSub='Talk',agentList=[];
+function fmtLeft(ms){if(!ms)return'';const h=Math.round((ms-Date.now())/3600000);return h>0?h+' h left':'expiring'}
+async function loadAgents(){try{
+  const r=isAdmin()?await api('agents'):await api('public/agents');
+  agentList=(r.agents||[]).map(a=>({...a,assistant_id:a.assistant_id||a.assistantId,sample:a.sample||a.owner==='+15***9001'}));
+  const t=clear($('agents-table'));
+  t.append(h('tr',{},['Agent','Business','Level','Status','Time left','Source'].concat(isAdmin()?['Owner','Builds']:[]).map(x=>h('th',{},x))));
+  for(const a of agentList)t.append(h('tr',{style:'cursor:pointer',onclick:()=>openAgent(a.key)},
+    h('td',{},(a.sample?'⭐ ':'')+(a.name||a.key),h('div',{class:'small muted'},a.key)),h('td',{},a.business||''),h('td',{},a.level||''),h('td',{},a.status||''),h('td',{},fmtLeft(a.expiresAt)),h('td',{},a.sample?'sample':(a.source||'')),
+    isAdmin()?h('td',{},a.owner||''):null,isAdmin()?h('td',{},a.builds??''):null));
+  if(!agentList.length)t.append(h('tr',{},h('td',{colspan:8,class:'muted'},'No live agents yet. Build one in the Forge tab.')));
+  if(agentKey&&agentList.some(a=>a.key===agentKey))openAgent(agentKey,true);
+  else if(!agentKey&&agentList.length)openAgent(agentList[0].key);
+}catch(e){clear($('agents-table')).append(h('tr',{},h('td',{class:'err'},e.message)))}}
+async function openAgent(key,keepSub){if(key!==agentKey&&!keepSub)agentSub='Talk';agentKey=key;
+  const base=agentList.find(a=>a.key===key)||{key};agentData={registry:base};
+  if(isAdmin()){try{agentData=await api('agents/'+key)}catch(e){}}
+  const reg=agentData.registry||base;$('agent-detail').classList.remove('hidden');
+  $('agent-title').textContent=(base.sample?'⭐ ':'')+(reg.name||key)+' · '+(reg.status||'');
+  const aid=base.assistant_id||reg.assistantId;
+  $('agent-webcall').classList.toggle('hidden',!aid);if(aid)$('agent-webcall').href='/call?agent='+encodeURIComponent(aid)+'&name='+encodeURIComponent(reg.name||'your agent');
+  for(const el of document.querySelectorAll('.admin-only'))el.classList.toggle('hidden',!isAdmin());
+  renderAgentTabs()}
+function renderAgentTabs(){const subs=isAdmin()?['Talk','Overview','Input','Generated','Flow','Build trace','Messages','Raw']:['Talk','Flow'];
+  if(!subs.includes(agentSub))agentSub='Talk';const box=clear($('agent-subtabs'));
   for(const s of subs)box.append(h('button',{class:s===agentSub?'on':'',onclick:()=>{agentSub=s;renderAgentTabs()}},s));
-  const pane=clear($('agent-pane'));const a=agentData,arc=a.archive||{};
-  if(agentSub==='Overview')pane.append(kv({key:a.registry.key,assistant_id:a.registry.assistantId,owner:a.registry.owner,level:a.registry.level,status:a.registry.status,builds:a.registry.builds,source:a.registry.source,created:fmtTime(a.registry.createdAt),expires:fmtTime(a.registry.expiresAt),last_trace:a.registry.lastTraceId,versions:(a.versions||[]).join(', '),pending_jobs:(a.jobs||[]).map(j=>j.type+' @ '+fmtTime(j.at)).join('; ')||'none'}));
+  const pane=clear($('agent-pane'));const a=agentData,arc=a.archive||{},reg=a.registry||{};
+  if(agentSub==='Talk'){const c=h('div',{});pane.append(c);createChat(c,{title:'Talk to '+(reg.name||agentKey),phone:'+15550102002',assistant:()=>agentKey})}
+  else if(agentSub==='Overview')pane.append(kv({key:reg.key,assistant_id:reg.assistantId,owner:reg.owner,level:reg.level,status:reg.status,builds:reg.builds,source:reg.source,created:fmtTime(reg.createdAt),expires:fmtTime(reg.expiresAt),last_trace:reg.lastTraceId,versions:(a.versions||[]).join(', '),pending_jobs:(a.jobs||[]).map(j=>j.type+' @ '+fmtTime(j.at)).join('; ')||'none'}));
   else if(agentSub==='Input')pane.append(kv(arc.input||{}));
   else if(agentSub==='Generated')pane.append(kv({persona_source:arc.persona_source,persona:arc.persona,greeting:arc.greeting,feature_level:arc.feature_level,ladder_warnings:(arc.ladder_warnings||[]).join('; ')||'none'}),h('pre',{style:'white-space:pre-wrap'},(arc.payload||{}).instructions||''));
-  else if(agentSub==='Flow'){const flow=(arc.payload||{}).conversation_flow;if(flow){const box2=h('div',{class:'flowwrap'});pane.append(box2);renderFlow(box2,flow,null,null)}else pane.append(h('div',{class:'muted'},'No workflow at this feature level.'))}
+  else if(agentSub==='Flow'){const box2=h('div',{class:'flowwrap'});pane.append(box2);const flow=(arc.payload||{}).conversation_flow;
+    if(flow)renderFlow(box2,flow,null,null);else api(flowPath(agentKey)).then(f=>renderFlow(box2,f.flow,null,null)).catch(e=>box2.append(h('div',{class:'small muted'},'Workflow not available: '+e.message)))}
   else if(agentSub==='Build trace')pane.append(spanBars(arc.spans));
   else if(agentSub==='Messages')pane.append(h('table',{},h('tr',{},['When','From','Callback','Message','Read'].map(x=>h('th',{},x))),(a.messages||[]).map(m=>h('tr',{},h('td',{},fmtTime(m.at)),h('td',{},m.caller_name),h('td',{},m.callback_number),h('td',{},m.message),h('td',{},m.read?'yes':'no')))));
-  else if(agentSub==='Chat'){const c=h('div',{});pane.append(c);createChat(c,{title:'Call '+(a.registry.name||agentKey),phone:'+15550102002',assistant:()=>agentKey})}
   else pane.append(h('pre',{style:'white-space:pre-wrap'},json(a)))}
+function openAgentTab(key){agentKey=key;agentSub='Talk';location.hash='#agents'}
 $('agents-refresh').onclick=loadAgents;
-$('agent-test').onclick=async()=>{try{const r=await api('agents/'+agentKey+'/test-call',{body:{}});$('agent-msg').textContent='Test call in '+r.delay_secs+' s'}catch(e){$('agent-msg').textContent=e.message}};
-$('agent-delete').onclick=async()=>{if(!confirm('Delete this agent now?'))return;try{await api('agents/'+agentKey+'/delete',{body:{}});$('agent-msg').textContent='Deleting...';setTimeout(()=>{openAgent(agentKey);loadAgents()},1500)}catch(e){$('agent-msg').textContent=e.message}};
+$('agent-dial').onclick=async()=>{const msg=$('agent-msg');if(!agentKey)return;
+  if(!isAdmin()){msg.className='small err';msg.textContent='Calling a phone number needs the admin token: add it in Settings. (You can always use "Call it in the browser".)';return}
+  msg.className='small muted';msg.textContent='Calling…';
+  try{const r=await api('agents/'+agentKey+'/call',{body:{to:$('agent-to').value}});msg.className='small';msg.textContent='✓ Ringing '+r.to+' from '+r.from+'. Pick up to talk to the agent.'}
+  catch(e){msg.className='small err';msg.textContent='✗ '+e.message}};
+$('agent-test').onclick=async()=>{try{const r=await api('agents/'+agentKey+'/test-call',{body:{}});$('agent-msg').textContent='Test call to the owner in '+r.delay_secs+' s'}catch(e){$('agent-msg').textContent=e.message}};
+$('agent-delete').onclick=async()=>{if(!confirm('Delete this agent now?'))return;try{await api('agents/'+agentKey+'/delete',{body:{}});$('agent-msg').textContent='Deleting…';setTimeout(loadAgents,1500)}catch(e){$('agent-msg').textContent=e.message}};
 onShow.agents=loadAgents;
 
-/* ---------- My agents tab: agents built from this browser, testable without a token ---------- */
-let SAMPLES=[];
-function myAgents(){let mine=[];try{mine=JSON.parse(LS.get('myAgents','[]'))||[]}catch(e){}
-  const seen=new Set(mine.map(a=>a.key));return mine.concat(SAMPLES.filter(a=>!seen.has(a.key)))}
-async function loadSamples(){try{const r=await api('public/samples');SAMPLES=(r.agents||[]).map(a=>({key:a.key,name:'⭐ '+(a.name||a.key),at:a.createdAt,sample:true}));refreshMine();
-  if(SAMPLES.length&&!$('forge-chat').querySelector('[data-sample]')){const a=SAMPLES[0];
-    $('forge-chat').insertBefore(h('div',{class:'banner','data-sample':'1',style:'margin-bottom:8px'},'Forge already built a sample agent on this deployment: '+a.name.replace('⭐ ','')+'. ',h('button',{onclick:()=>openMine(a.key)},'Try it →')),$('forge-chat').children[1]||null)}
-  if(current==='mine')showMine()}catch(e){}}
-function rememberAgent(key,name){const list=myAgents();if(list.some(a=>a.key===key))return false;
-  list.unshift({key,name:name||key,at:Date.now()});LS.set('myAgents',JSON.stringify(list.slice(0,20)));refreshMine();return true}
-let mineChat=null;
-function refreshMine(){const list=myAgents();const prev=$('mine-select').value;
-  const sel=clear($('mine-select'));for(const a of list)sel.append(h('option',{value:a.key},a.name+' ('+a.key+')'));
-  if(prev&&list.some(a=>a.key===prev))sel.value=prev;}
-function openMine(key){if(key)$('mine-select').value=key;location.hash='#mine';showMine()}
-async function showMine(){const key=$('mine-select').value;if(!key){$('mine-meta').textContent='Build an agent in the Forge tab first.';return}
-  const a=myAgents().find(x=>x.key===key)||{};$('mine-meta').textContent=(a.sample?'Sample built by Forge on this deployment ':'Built ')+fmtTime(a.at)+'. Starting a chat calls it like a phone caller would: greeting, questions, take a message.';
-  $('mine-call').classList.add('hidden');
-  api('public/agent/'+key).then(info=>{if(info.assistant_id&&info.status==='active'){$('mine-call').href='/call?agent='+encodeURIComponent(info.assistant_id)+'&name='+encodeURIComponent(info.name||'your agent');$('mine-call').classList.remove('hidden')}
-    else if(info.status&&info.status!=='active')$('mine-meta').textContent+=' Status: '+info.status+'.'}).catch(()=>{});
-  const box=clear($('mine-chat'));mineChat=createChat(box,{title:'Talk to '+(a.name||key),phone:'+15550102002',assistant:()=>$('mine-select').value,onUpdate:st=>{
-    if(st.flow&&st.flow.flow.nodes.length)renderFlow($('mine-flow'),st.flow.flow,st.session,n=>nodeInfo($('mine-node'),st.flow,n))}});
-  try{const f=await api(flowPath(key));renderFlow($('mine-flow'),f.flow,null,n=>nodeInfo($('mine-node'),f,n))}catch(e){clear($('mine-flow')).append(h('div',{class:'small muted'},'Workflow not available: '+e.message))}}
-$('mine-select').onchange=showMine;
-$('mine-dial').onclick=async()=>{const key=$('mine-select').value,msg=$('mine-dial-msg');if(!key)return;
-  if(!isAdmin()){msg.className='small err';msg.textContent='Add the admin token in Settings first.';return}
-  msg.className='small muted';msg.textContent='Calling…';
-  try{const r=await api('agents/'+key+'/call',{body:{to:$('mine-to').value}});msg.className='small';msg.textContent='✓ Ringing '+r.to+' from '+r.from+'. Pick up to talk to your agent.'}
-  catch(e){msg.className='small err';msg.textContent='✗ '+e.message}};
-$('mine-forget').onclick=()=>{const key=$('mine-select').value;let mine=[];try{mine=JSON.parse(LS.get('myAgents','[]'))||[]}catch(e){}
-  LS.set('myAgents',JSON.stringify(mine.filter(a=>a.key!==key)));refreshMine();showMine()};
-onShow.mine=showMine;
-refreshMine();loadSamples();
+/* sample banner on the Forge tab: proof that Forge already built a working agent on this deployment */
+async function loadSamples(){try{const r=await api('public/samples');const a=(r.agents||[])[0];
+  if(a&&!$('forge-chat').querySelector('[data-sample]'))
+    $('forge-chat').insertBefore(h('div',{class:'banner','data-sample':'1',style:'margin-bottom:8px'},'Forge already built a sample agent on this deployment: ⭐ '+a.name+'. ',h('button',{onclick:()=>openAgentTab(a.key)},'Try it in Agents →')),$('forge-chat').children[1]||null)}catch(e){}}
+loadSamples();
 
 /* ---------- Clinic tab ---------- */
 let clinicFlow=null,clinicData=null;
