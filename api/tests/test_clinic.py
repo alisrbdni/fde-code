@@ -335,3 +335,18 @@ async def test_triage_is_recorded_on_the_patient(client: Client, app):
     patient = (await app.state.call("patient", PATIENT, "snapshot"))["patient"]
     assert patient["lastTriage"]["specialty"] == "dermatology"
     assert patient["lastTriage"]["urgency"] == "routine" and patient["lastTriage"]["at"] > 0
+
+
+@pytest.mark.parametrize("text,urgency", [
+    ("I've had a cough for a week, no fever, no chest pain", "routine"),
+    ("no fever or trouble breathing, just a cough", "routine"),
+    ("I don't have chest pain, just a sore throat", "routine"),
+    ("no fever but chest pain since this morning", "emergency"),
+    ("I'm not sure if it's chest pain or heartburn", "emergency"),
+    ("I said no, I have chest pain", "emergency"),
+    ("I can't breathe", "emergency"),
+    ("I don't want to die", "crisis"),
+    ("no high fever, but a deep cut that needs stitches", "urgent"),
+])
+def test_triage_handles_negation(text, urgency):
+    assert clinic.triage_rules(text)["urgency"] == urgency

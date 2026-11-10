@@ -475,3 +475,47 @@ async def test_built_agent_is_reachable_publicly(cc: Client, capp):
     assert payload["telephony_settings"]["supports_unauthenticated_web_calls"] is True
     page = await cc.get("/call")
     assert 'id="call-custom"' in page.text and "params.get(\"agent\")" in page.text
+
+
+async def test_admin_can_have_an_agent_call_a_number(cc: Client, capp):
+    key = (await cc.build(await cc.ready_draft()))["agent_key"]
+    assert (await cc.post(f"/ui/api/agents/{key}/call", {"to": "+61432000111"})).status == 401
+    bad = await cc.post(f"/ui/api/agents/{key}/call", {"to": "+15550191234"}, headers=AUTH)
+    assert bad.status == 400  # demo numbers are never dialled
+    ok = await cc.post(f"/ui/api/agents/{key}/call", {"to": "+61 432 000 111"}, headers=AUTH)
+    assert ok.status == 200 and ok.json["to"] == "+61***0111"
+    (placed,) = capp.telnyx.calls
+    assert placed["to"] == "+61432000111" and placed["from"] == "+15550100000"
+
+
+async def test_demo_chat_never_dials_its_demo_number(cc: Client, capp):
+    from function.config import is_demo_number
+    demo = "+15550191234"
+    assert is_demo_number(demo)
+    call = await cc.start_call(demo)
+    await cc.save(call, demo, **SUNRISE)
+    await cc.build(call, demo)
+    res = await cc.tool("call_me_with_agent", caller_phone=demo, call_id=call["_call_id"])
+    assert res["_is_error"] and "browser demo chat" in res["error"]
+
+
+async def test_deployments_panel_offline(cc: Client):
+    r = (await cc.get("/ui/api/deployments", headers=AUTH)).json
+    assert r["available"] is False and "offline" in r["reason"] and "telnyx-edge list" in r["links"]["cli"]
+    assert (await cc.get("/ui/api/deployments")).status == 401
+
+
+async def test_sample_agent_is_built_once_and_reused(cc: Client, capp):
+    import asyncio
+    from function import ui_api
+
+    ui_api._sample_state["last_attempt"] = 0.0
+    first, second = await asyncio.gather(cc.get("/ui/api/public/samples"), cc.get("/ui/api/public/samples"))
+    bodies = [first.json, second.json]
+    assert sum(1 for b in bodies if b["built_now"]) == 1  # the actor's build lock: one sample, not two
+    assert len(capp.telnyx.assistants) == 1
+    again = (await cc.get("/ui/api/public/samples")).json
+    assert again["built_now"] is False and again["agents"][0]["name"] == "Mia - Harbor Physio"
+    assert "owner" not in again["agents"][0] and again["agents"][0]["assistant_id"]
+    chat = (await cc.post("/ui/api/public/chat/start", {"assistant": again["agents"][0]["key"]})).json
+    assert "Harbor Physio" in chat["events"][1]["text"]

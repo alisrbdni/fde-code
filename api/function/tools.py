@@ -187,6 +187,13 @@ async def list_my_agents(app, trace, args) -> Dict[str, Any]:
 
 async def call_me_with_agent(app, trace, args) -> Dict[str, Any]:
     owner = await _owner(app, trace, args, private=True)
+    from .config import is_demo_number
+
+    if is_demo_number(owner):
+        raise ToolError(
+            "This is a browser demo chat, so there's no real phone number to call. You can talk to the agent right "
+            "here instead: open My agents in the console, or press Call it in the browser."
+        )
     flags, _ = await app.flags.get(trace)
     now = _now_ms()
     result = await app.state.call("builder", owner, "listAgents", now, trace_id=trace.trace_id)

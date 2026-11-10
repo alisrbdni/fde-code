@@ -82,7 +82,7 @@ svg text{font:12px system-ui,sans-serif}
 <header>
   <h1>Agent Forge</h1>
   <nav id="nav">
-    <a href="#forge" data-tab="forge">Forge</a><a href="#agents" data-tab="agents">Agents</a><a href="#mine" data-tab="mine" id="nav-mine" class="hidden">My agents</a>
+    <a href="#forge" data-tab="forge">Forge</a><a href="#agents" data-tab="agents">Agents</a><a href="#mine" data-tab="mine" id="nav-mine">My agents</a>
     <a href="#clinic" data-tab="clinic">Clinic</a><a href="#ops" data-tab="ops">Ops</a><a href="#settings" data-tab="settings">Settings</a><a href="/call" target="_blank" rel="noopener">📞 Call in browser</a>
   </nav>
   <div class="chips" id="chips"></div>
@@ -137,9 +137,14 @@ New patient cleanings are 99 dollars</textarea>
   <section class="tab" id="tab-mine">
     <div class="grid chatflow">
       <div class="grid">
-        <div class="card"><h2>Agents you built in this browser</h2>
+        <div class="card"><h2>Agents built by Forge</h2>
+          <div class="small muted" style="margin-bottom:6px">⭐ = a sample Forge built on this deployment (rebuilt automatically when it expires). Agents you build in the Forge tab appear here too.</div>
           <div class="row"><select id="mine-select" style="flex:1 1 220px"></select><a id="mine-call" class="hidden" target="_blank" rel="noopener"><button>📞 Call it in the browser</button></a><button class="ghost" id="mine-forget">Remove from list</button></div>
           <div class="small muted" id="mine-meta" style="margin-top:6px"></div>
+        </div>
+        <div class="card"><h2>Have it call a phone</h2>
+          <div class="row"><input id="mine-to" placeholder="Your number, e.g. +61 4xx xxx xxx"><button id="mine-dial">📞 Call me</button></div>
+          <div class="small muted" id="mine-dial-msg">Needs the admin token (so the console can't be used to dial strangers) and a Telnyx number set as FORGE_NUMBER.</div>
         </div>
         <div class="card" id="mine-chat"></div>
       </div>
@@ -187,6 +192,7 @@ New patient cleanings are 99 dollars</textarea>
         <div class="scroll" style="max-height:320px"><table id="kv-keys"></table></div>
         <pre id="kv-value" class="small" style="white-space:pre-wrap;max-height:320px;overflow:auto"></pre>
       </div>
+      <div class="card" style="grid-column:1/-1"><h2>Deployments (Telnyx Edge) <button class="ghost" id="dep-refresh">Refresh</button> <span class="small muted" id="dep-meta"></span></h2><div class="scroll" id="deployments"></div></div>
       <div class="card"><h2>Links</h2><div id="links" class="small"></div></div>
     </div>
   </section>
@@ -402,15 +408,22 @@ $('agent-delete').onclick=async()=>{if(!confirm('Delete this agent now?'))return
 onShow.agents=loadAgents;
 
 /* ---------- My agents tab: agents built from this browser, testable without a token ---------- */
-function myAgents(){try{return JSON.parse(LS.get('myAgents','[]'))||[]}catch(e){return []}}
+let SAMPLES=[];
+function myAgents(){let mine=[];try{mine=JSON.parse(LS.get('myAgents','[]'))||[]}catch(e){}
+  const seen=new Set(mine.map(a=>a.key));return mine.concat(SAMPLES.filter(a=>!seen.has(a.key)))}
+async function loadSamples(){try{const r=await api('public/samples');SAMPLES=(r.agents||[]).map(a=>({key:a.key,name:'⭐ '+(a.name||a.key),at:a.createdAt,sample:true}));refreshMine();
+  if(SAMPLES.length&&!$('forge-chat').querySelector('[data-sample]')){const a=SAMPLES[0];
+    $('forge-chat').insertBefore(h('div',{class:'banner','data-sample':'1',style:'margin-bottom:8px'},'Forge already built a sample agent on this deployment: '+a.name.replace('⭐ ','')+'. ',h('button',{onclick:()=>openMine(a.key)},'Try it →')),$('forge-chat').children[1]||null)}
+  if(current==='mine')showMine()}catch(e){}}
 function rememberAgent(key,name){const list=myAgents();if(list.some(a=>a.key===key))return false;
   list.unshift({key,name:name||key,at:Date.now()});LS.set('myAgents',JSON.stringify(list.slice(0,20)));refreshMine();return true}
 let mineChat=null;
-function refreshMine(){const list=myAgents();$('nav-mine').classList.toggle('hidden',!list.length);
-  const sel=clear($('mine-select'));for(const a of list)sel.append(h('option',{value:a.key},a.name+' ('+a.key+')'));}
+function refreshMine(){const list=myAgents();const prev=$('mine-select').value;
+  const sel=clear($('mine-select'));for(const a of list)sel.append(h('option',{value:a.key},a.name+' ('+a.key+')'));
+  if(prev&&list.some(a=>a.key===prev))sel.value=prev;}
 function openMine(key){if(key)$('mine-select').value=key;location.hash='#mine';showMine()}
 async function showMine(){const key=$('mine-select').value;if(!key){$('mine-meta').textContent='Build an agent in the Forge tab first.';return}
-  const a=myAgents().find(x=>x.key===key)||{};$('mine-meta').textContent='Built '+fmtTime(a.at)+'. Starting a chat calls it like a phone caller would: greeting, questions, take a message.';
+  const a=myAgents().find(x=>x.key===key)||{};$('mine-meta').textContent=(a.sample?'Sample built by Forge on this deployment ':'Built ')+fmtTime(a.at)+'. Starting a chat calls it like a phone caller would: greeting, questions, take a message.';
   $('mine-call').classList.add('hidden');
   api('public/agent/'+key).then(info=>{if(info.assistant_id&&info.status==='active'){$('mine-call').href='/call?agent='+encodeURIComponent(info.assistant_id)+'&name='+encodeURIComponent(info.name||'your agent');$('mine-call').classList.remove('hidden')}
     else if(info.status&&info.status!=='active')$('mine-meta').textContent+=' Status: '+info.status+'.'}).catch(()=>{});
@@ -418,9 +431,15 @@ async function showMine(){const key=$('mine-select').value;if(!key){$('mine-meta
     if(st.flow&&st.flow.flow.nodes.length)renderFlow($('mine-flow'),st.flow.flow,st.session,n=>nodeInfo($('mine-node'),st.flow,n))}});
   try{const f=await api(flowPath(key));renderFlow($('mine-flow'),f.flow,null,n=>nodeInfo($('mine-node'),f,n))}catch(e){clear($('mine-flow')).append(h('div',{class:'small muted'},'Workflow not available: '+e.message))}}
 $('mine-select').onchange=showMine;
-$('mine-forget').onclick=()=>{const key=$('mine-select').value;LS.set('myAgents',JSON.stringify(myAgents().filter(a=>a.key!==key)));refreshMine();showMine()};
+$('mine-dial').onclick=async()=>{const key=$('mine-select').value,msg=$('mine-dial-msg');if(!key)return;
+  if(!isAdmin()){msg.className='small err';msg.textContent='Add the admin token in Settings first.';return}
+  msg.className='small muted';msg.textContent='Calling…';
+  try{const r=await api('agents/'+key+'/call',{body:{to:$('mine-to').value}});msg.className='small';msg.textContent='✓ Ringing '+r.to+' from '+r.from+'. Pick up to talk to your agent.'}
+  catch(e){msg.className='small err';msg.textContent='✗ '+e.message}};
+$('mine-forget').onclick=()=>{const key=$('mine-select').value;let mine=[];try{mine=JSON.parse(LS.get('myAgents','[]'))||[]}catch(e){}
+  LS.set('myAgents',JSON.stringify(mine.filter(a=>a.key!==key)));refreshMine();showMine()};
 onShow.mine=showMine;
-refreshMine();
+refreshMine();loadSamples();
 
 /* ---------- Clinic tab ---------- */
 let clinicFlow=null,clinicData=null;
@@ -487,12 +506,26 @@ async function loadKV(prefix){
 }
 async function showKV(key){try{const r=await api('kv/value?key='+encodeURIComponent(key));$('kv-value').textContent=key+' ('+r.size_bytes+' B, phone numbers masked)\n'+(typeof r.value==='string'?r.value:json(r.value))}catch(e){$('kv-value').textContent=key+': '+e.message}}
 $('kv-go').onclick=()=>loadKV();
+async function loadDeployments(refresh){const box=$('deployments');try{const r=await api('deployments'+(refresh?'?refresh=1':''));clear(box);
+  if(!r.available){box.append(h('div',{class:'muted'},'Not available: '+r.reason));return}
+  $('dep-meta').textContent='checked '+new Date(r.checked_at).toLocaleTimeString();
+  const pct=x=>x==null?'':(100*x).toFixed(1)+'%',ms=x=>x==null?'':Math.round(x)+' ms';
+  box.append(h('table',{},h('tr',{},['Function','Status','24 h requests','Success','Errors','p50 / p95 / p99','Latest revisions'].map(x=>h('th',{},x))),
+    r.functions.map(f=>{const m=f.metrics_24h||{};return h('tr',{},
+      h('td',{},f.url?h('a',{href:f.url,target:'_blank',rel:'noopener'},f.name):f.name,h('div',{class:'small muted'},f.id)),
+      h('td',{},h('span',{class:'chip '+(f.status==='deploy_ok'?'ok':/fail|error/.test(f.status||'')?'bad':'warn')},f.status||'?'),f.message?h('div',{class:'small muted'},f.message):null),
+      h('td',{},m.request_count??''),h('td',{},pct(m.request_success_rate)),h('td',{class:m.request_error_rate>0.05?'err':''},pct(m.request_error_rate)),
+      h('td',{},[ms(m.request_latency_p50_ms),ms(m.request_latency_p95_ms),ms(m.request_latency_p99_ms)].join(' / ')),
+      h('td',{class:'small'},(f.revisions||[]).map(v=>h('div',{},(v.active?'● ':'○ ')+v.revision_id+' · '+new Date(v.shipped_at).toLocaleString()+' · '+v.build_status+' / '+v.deploy_status)),f.revisions_error?h('div',{class:'err'},f.revisions_error):null))})));
+  const L=r.links;box.append(h('div',{class:'small',style:'margin-top:8px'},'Check on Telnyx: ',h('a',{href:L.portal,target:'_blank',rel:'noopener'},'Portal'),' ('+L.portal_where+') · ',h('a',{href:L.docs,target:'_blank',rel:'noopener'},'CLI docs'),' · CLI: ',L.cli.map(c=>h('code',{style:'margin-right:8px'},c))))
+}catch(e){clear(box).append(h('div',{class:'err'},e.message))}}
+$('dep-refresh').onclick=()=>loadDeployments(true);
 async function loadLinks(){try{const r=await api('links');const box=clear($('links'));
   const sec=(title,items,render)=>{box.append(h('div',{style:'margin-top:6px'},h('b',{},title)));box.append(h('ul',{style:'margin:4px 0 0 0;padding-left:18px'},items.map(render)))};
   const a=i=>i.url?h('li',{},h('a',{href:i.url,target:'_blank',rel:'noopener'},i.label),i.where?h('span',{class:'muted'},' ('+i.where+')'):null):null;
   sec('This deployment',r.app,a);sec('Telnyx Portal',r.telnyx_portal,a);
   sec('CLI (run in a terminal)',r.cli,i=>h('li',{},i.label+': ',h('code',{},i.command)));sec('Docs',r.docs,a)}catch(e){}}
-onShow.ops=()=>{loadOps();loadFlags();loadKV();loadLinks()};
+onShow.ops=()=>{loadOps();loadFlags();loadKV();loadLinks();loadDeployments()};
 setInterval(()=>{if(current==='ops'&&!document.hidden)loadOps()},5000);
 
 /* ---------- Settings tab ---------- */

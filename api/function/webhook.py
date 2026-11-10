@@ -17,6 +17,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import builder, generator
+from .log import log
 from .config import mask_phone, normalize_phone
 from .policy import check as policy_check
 
@@ -118,8 +119,9 @@ async def forge_variables(app: Any, trace: Any, body: Any) -> Dict[str, Any]:
         info = None if isinstance(start_res, Exception) else start_res
         if info is None:
             values["degraded"] = "true"
-            trace.set(degraded=True, call_id=call_id)
+            trace.set(degraded=True, call_id=call_id, error=str(start_res)[:160])
             trace.outcome = "degraded"
+            log("warn", "forge.variables_degraded", error=str(start_res)[:200], trace_id=trace.trace_id)
         # caller identity comes from the payload, not the actor
         values["caller_phone"] = owner
         values["caller_id_verified"] = "true" if attested else "false"

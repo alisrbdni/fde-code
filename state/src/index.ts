@@ -78,6 +78,23 @@ const json = (status: number, body: Record<string, any>, headers: Record<string,
     headers: { "content-type": "application/json", ...headers },
   })
 
+/**
+ * The actor runtime briefly answers "503 actor directory unavailable" (seen right after deploys). A 503 means the
+ * invocation never ran, so retrying is safe; any other error is returned as-is (a method may have committed).
+ */
+async function invokeWithRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn()
+    } catch (exc: any) {
+      const msg = String(exc?.message ?? exc)
+      if (i >= attempts || !/returned 503|directory unavailable/i.test(msg)) throw exc
+      log("warn", "rpc.retry", { attempt: i, error: msg.slice(0, 120) })
+      await new Promise((r) => setTimeout(r, 250 * i * i))
+    }
+  }
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const route = req.method + " " + new URL(req.url).pathname
@@ -114,7 +131,7 @@ export default {
     try {
       const namespace = (env as any)[spec.binding] as any
       const instance = namespace.idFromName(actorId(String(body.name)))
-      const result = await (instance as any)[method](...args)
+      const result = await invokeWithRetry(() => (instance as any)[method](...args))
       const ms = Date.now() - started
       log("info", "rpc.ok", { trace_id: traceId, actor: body.actor, name: body.name, method, ms })
       return json(200, { ok: true, result }, { "server-timing": `actor;dur=${ms}` })

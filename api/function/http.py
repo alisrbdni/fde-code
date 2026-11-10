@@ -48,10 +48,10 @@ def _encode_body(body: Body, content_type: str) -> tuple[bytes, str]:
     return bytes(body), content_type
 
 
-def _do_request(method: str, url: str, headers: Mapping[str, str], data: bytes) -> HttpResponse:
+def _do_request(method: str, url: str, headers: Mapping[str, str], data: bytes, timeout: float = TIMEOUT) -> HttpResponse:
     req = urllib.request.Request(url, data=data if data else None, headers=dict(headers), method=method)
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return HttpResponse(resp.status, resp.read())
     except urllib.error.HTTPError as err:
         try:
@@ -77,7 +77,7 @@ async def request(
     data, _ = _encode_body(body, content_type)
 
     def run() -> HttpResponse:
-        return _do_request(method.upper(), url, hdrs, data)
+        return _do_request(method.upper(), url, hdrs, data, timeout or TIMEOUT)
 
     future = asyncio.ensure_future(asyncio.to_thread(run)) if timeout is None else asyncio.ensure_future(
         asyncio.wait_for(asyncio.to_thread(run), timeout)

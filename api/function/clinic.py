@@ -246,11 +246,44 @@ def _normalise_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-def _matched_phrases(text: str, phrases: Tuple[str, ...]) -> List[str]:
+_NEGATION = re.compile(r"^(?:no|not|without|never|denies|deny|none|zero|don't|dont|do not|haven't|hasn't|isn't|aren't|wasn't)$")
+_FILLER = {"any", "or", "and", "a", "an", "real", "have", "had", "having", "got", "get", "feel", "feeling", "much", "other"}
+
+
+def _negated(text: str, start: int) -> bool:
+    """True when the phrase at `start` is plainly denied: "no chest pain", "no fever or trouble breathing".
+
+    The negation has to be in the same clause, with only filler words in between, or carried across a list
+    joined by or/and/nor ("no fever or trouble breathing"). "no fever but chest pain", "not sure if it's
+    chest pain" and "I said no, I have chest pain" stay positive. When in doubt the rule fires, because
+    under-triage is the dangerous mistake.
+    """
+    clause = re.split(r"[,.;:!?]|\bbut\b|\bhowever\b|\bthough\b", text[:start])[-1]
+    words = re.findall(r"[a-z']+", clause)[-7:]
+    listed = bool(words) and words[-1] in ("or", "and", "nor")  # "...fever or <phrase>"
+    skipped = 0
+    for i in range(len(words) - 1, -1, -1):
+        w = words[i]
+        two = " ".join(words[i - 1:i + 1]) if i else ""
+        if _NEGATION.match(w) or (two and _NEGATION.match(two)):
+            return True
+        if w in _FILLER or w in ("or", "and", "nor"):
+            continue
+        if listed and skipped < 3:  # an earlier list item ("fever", "high fever")
+            skipped += 1
+            continue
+        return False
+    return False
+
+
+def _matched_phrases(text: str, phrases: Tuple[str, ...], negatable: bool = False) -> List[str]:
     hits: List[str] = []
     for phrase in phrases:
-        if re.search(rf"(?<![a-z]){re.escape(phrase)}(?![a-z])", text):
+        for match in re.finditer(rf"(?<![a-z]){re.escape(phrase)}(?![a-z])", text):
+            if negatable and _negated(text, match.start()):
+                continue
             hits.append(phrase)
+            break
     return hits
 
 
@@ -264,8 +297,9 @@ def triage_rules(symptoms: str, age: Optional[int] = None, for_child: bool = Fal
     text = _normalise_text(symptoms)
 
     crisis = _matched_phrases(text, CRISIS_PHRASES)
-    emergency = _matched_phrases(text, EMERGENCY_PHRASES)
-    urgent = _matched_phrases(text, URGENT_PHRASES)
+    # crisis phrases are never negated ("I don't want to die" still offers 988); emergency/urgent ones can be denied
+    emergency = _matched_phrases(text, EMERGENCY_PHRASES, negatable=True)
+    urgent = _matched_phrases(text, URGENT_PHRASES, negatable=True)
     red_flags = crisis + emergency + urgent
 
     if crisis:

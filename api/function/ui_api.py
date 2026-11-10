@@ -153,6 +153,8 @@ async def _route(fn: Any, app: Any, trace: Any, m: str, sub: str, body: Dict[str
                 return _resp(200, await _agent_detail(app, trace, key))
             if len(parts) == 3 and m == "POST" and parts[2] in ("test-call", "delete"):
                 return await _agent_action(app, trace, key, parts[2], body)
+            if len(parts) == 3 and m == "POST" and parts[2] == "call":
+                return await _call_number(app, trace, key, body)
 
     if sub == "forge/build" and m == "POST":
         return _resp(200, await _form_build(app, trace, body))
@@ -178,6 +180,9 @@ async def _route(fn: Any, app: Any, trace: Any, m: str, sub: str, body: Dict[str
 
     if sub == "links" and m == "GET":
         return _resp(200, links(app))
+
+    if sub == "deployments" and m == "GET":
+        return _resp(200, await _deployments(app, trace, refresh=req.query.get("refresh") == "1"))
 
     return _err(404, "not found")
 
@@ -519,8 +524,8 @@ def _rate_ok(req: Any, kind: str) -> bool:
 
 
 def _demo_phone() -> str:
-    # +1 555 010 xxxx is reserved for fiction: never a real person's number.
-    return "+1555010" + "".join(secrets.choice("0123456789") for _ in range(4))
+    # +1 555 019 xxxx: fictional (555-01xx is reserved for fiction) and recognisable as a demo chat (is_demo_number)
+    return "+1555019" + "".join(secrets.choice("0123456789") for _ in range(4))
 
 
 async def _public(app: Any, trace: Any, m: str, sub: str, body: Dict[str, Any], req: Any):
@@ -546,6 +551,8 @@ async def _public(app: Any, trace: Any, m: str, sub: str, body: Dict[str, Any], 
         return _resp(200, {"key": rec.get("key"), "name": rec.get("name"), "status": rec.get("status"),
                            "assistant_id": rec.get("assistantId"), "level": rec.get("level"),
                            "expires_at": rec.get("expiresAt")})
+    if sub == "samples" and m == "GET":
+        return _resp(200, await _samples(app, trace))
     engine = simulator.Engine(app, trace)
     if sub == "chat/start" and m == "POST":
         if not _rate_ok(req, "start"):
@@ -590,4 +597,145 @@ def _call_page(app: Any):
     return _resp(200, html, content_type="text/html; charset=utf-8",
                  headers={"content-security-policy": CALL_CSP, "x-content-type-options": "nosniff",
                           "permissions-policy": "microphone=(self)", "cache-control": "no-store"})
+
+
+async def _call_number(app: Any, trace: Any, key: str, body: Dict[str, Any]):
+    """Admin only: the agent phones a number you type (TeXML ai_calls). Admin-only on purpose, because a public
+    "dial any number" button would be an open door to toll fraud."""
+    from .config import is_demo_number
+    from .telnyx_api import TelnyxError
+
+    to = normalize_phone(body.get("to"))
+    if not to or is_demo_number(to):
+        return _err(400, "Enter a real phone number in international format, e.g. +61 4xx xxx xxx.")
+    s = app.settings
+    if not (s.texml_app_id and s.forge_number):
+        return _err(409, "Outbound calls need TEXML_APP_ID and FORGE_NUMBER (a Telnyx number on that TeXML app).")
+    reg = (await app.state.call("registry", "global", "get", key, trace_id=trace.trace_id)).get("agent")
+    if not reg or not reg.get("assistantId") or reg.get("status") != "active":
+        return _err(404, "unknown or inactive agent")
+    try:
+        async with trace.span("telnyx.ai_call"):
+            result = await app.telnyx.ai_call(s.texml_app_id, s.forge_number, to, reg["assistantId"])
+    except TelnyxError as exc:
+        log("warn", "console.call_failed", agent_key=key, to=mask_phone(to), status=exc.status)
+        return _err(502, f"Telnyx refused the call ({exc.status}): {str(exc.body)[:300]}")
+    log("info", "console.call_placed", agent_key=key, to=mask_phone(to), trace_id=trace.trace_id)
+    return _resp(200, {"ok": True, "to": mask_phone(to), "from": mask_phone(s.forge_number), "result": result})
+
+
+_DEPLOY_CACHE: Dict[str, Any] = {}
+
+
+async def _deployments(app: Any, trace: Any, refresh: bool = False) -> Dict[str, Any]:
+    """Edge Compute status for the console: every function, its latest revisions and 24 h metrics, from the same
+    REST API the telnyx-edge CLI uses (/v2/compute/funcs). Cached for 30 s."""
+    import datetime as dt
+    from urllib.parse import urlencode
+
+    from .http import request
+
+    cached = _DEPLOY_CACHE.get("v")
+    if cached and not refresh and time.monotonic() - cached[0] < 30:
+        return cached[1]
+    key = app.settings.telnyx_api_key
+    base = app.settings.telnyx_api_base.rstrip("/") + "/compute/funcs"
+    if not key:
+        return {"available": False, "reason": "no TELNYX_API_KEY (offline mode)", "functions": [], "links": _deploy_links()}
+    headers = {"authorization": f"Bearer {key}"}
+
+    async def get(url: str) -> Any:
+        resp = await request("GET", url, headers=headers, timeout=15)
+        if not resp.ok:
+            raise RuntimeError(f"{resp.status} {resp.text[:120]}")
+        return resp.json() or {}
+
+    now = dt.datetime.now(dt.timezone.utc)
+    window = {"start_time": (now - dt.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+              "end_time": now.strftime("%Y-%m-%dT%H:%M:%S.000Z")}
+    out: List[Dict[str, Any]] = []
+    try:
+        async with trace.span("telnyx.compute funcs"):
+            funcs = (await get(base + "?page%5Bsize%5D=50")).get("data") or []
+        for f in funcs:
+            item = {"name": f.get("name"), "id": f.get("id"), "status": f.get("status"),
+                    "url": f"https://{f.get('invoke_url')}" if f.get("invoke_url") else "",
+                    "updated_at": f.get("updated_at"), "message": f.get("message")}
+            try:
+                revs = (await get(f"{base}/{f['id']}/revisions?page%5Bsize%5D=5")).get("data") or []
+                item["revisions"] = [{k: r.get(k) for k in ("revision_id", "shipped_at", "build_status", "deploy_status",
+                                                            "active", "commit_sha", "build_ok_at")} for r in revs]
+            except Exception as exc:
+                item["revisions_error"] = str(exc)[:120]
+            try:
+                agg = (await get(f"{base}/{f['id']}/metric_aggregates?" + urlencode({**window, "page[size]": 5}))).get("data") or []
+                if agg:
+                    a = agg[0]
+                    item["metrics_24h"] = {k: a.get(k) for k in (
+                        "request_count", "request_success_rate", "request_error_rate", "request_client_error_rate",
+                        "request_latency_p50_ms", "request_latency_p95_ms", "request_latency_p99_ms")}
+            except Exception as exc:
+                item["metrics_error"] = str(exc)[:120]
+            out.append(item)
+    except Exception as exc:
+        log("warn", "console.deployments_failed", error=str(exc)[:160])
+        return {"available": False, "reason": f"Telnyx compute API: {str(exc)[:160]}", "functions": [], "links": _deploy_links()}
+    result = {"available": True, "checked_at": now.isoformat(), "functions": out, "links": _deploy_links()}
+    _DEPLOY_CACHE["v"] = (time.monotonic(), result)
+    return result
+
+
+def _deploy_links() -> Dict[str, Any]:
+    return {
+        "portal": "https://portal.telnyx.com/",
+        "portal_where": "Edge Compute → Functions (status, revisions, logs) · AI → AI Assistants · Numbers",
+        "docs": "https://developers.telnyx.com/docs/edge-compute/reference/cli",
+        "cli": ["telnyx-edge list", "telnyx-edge deployments forge-api", "telnyx-edge metrics forge-api",
+                "telnyx-edge logs forge-api --tail", "telnyx-edge actors list"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# sample agent: proof on first visit that Forge builds real agents on this deployment
+# ---------------------------------------------------------------------------
+
+SAMPLE_OWNER = "+15550199001"  # demo range: never dialled
+SAMPLE_FIELDS = {
+    "business_name": "Harbor Physio", "agent_name": "Mia", "template": "receptionist", "tone": "friendly",
+    "voice": "warm", "hours": "Monday to Friday, 8 AM to 6 PM",
+    "facts": ["We are at 12 Harbour Street", "An initial assessment costs 90 dollars",
+              "We treat sports injuries, back pain and post-surgery rehab"],
+}
+SAMPLE_RETRY_SECS = 600.0
+_sample_state: Dict[str, float] = {"last_attempt": 0.0}
+
+
+def _public_agent(rec: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: rec.get(k) for k in ("key", "name", "business", "level", "status", "expiresAt", "createdAt", "builds")} | {
+        "assistant_id": rec.get("assistantId"), "sample": True}
+
+
+async def _samples(app: Any, trace: Any) -> Dict[str, Any]:
+    """Active sample agents. If there's none (they expire after 24 h like every agent), Forge builds one now through
+    the normal pipeline. The BuilderProfile actor's build lock means concurrent visitors still produce one agent."""
+    listed = await app.state.call("registry", "global", "list", 200, trace_id=trace.trace_id)
+    active = [a for a in listed.get("agents") or [] if a.get("owner") == SAMPLE_OWNER and a.get("status") == "active"
+              and int(a.get("expiresAt") or 0) > _ms()]
+    if active:
+        return {"agents": [_public_agent(a) for a in active[:3]], "built_now": False}
+    if time.monotonic() - _sample_state["last_attempt"] < SAMPLE_RETRY_SECS:
+        return {"agents": [], "built_now": False, "note": "a sample build was attempted recently; try again later"}
+    _sample_state["last_attempt"] = time.monotonic()
+    call_id = "web_" + secrets.token_hex(8)
+    args = {"caller_phone": SAMPLE_OWNER, "call_id": call_id}
+    await webhook.forge_variables(app, trace, simulator._init_body(SAMPLE_OWNER, call_id))
+    await tools.start_new_draft(app, trace, args)
+    await tools.save_draft(app, trace, {**args, "values": SAMPLE_FIELDS})
+    built = await webhook.build_agent(app, trace, args)
+    log("info", "console.sample_built", status=built.get("build_status"), agent_key=built.get("agent_key"),
+        trace_id=trace.trace_id)
+    if built.get("build_status") not in ("ready",):
+        return {"agents": [], "built_now": False, "note": f"sample build: {built.get('build_status')}"}
+    rec = (await app.state.call("registry", "global", "get", built["agent_key"], trace_id=trace.trace_id)).get("agent") or {}
+    return {"agents": [_public_agent(rec)] if rec else [], "built_now": True}
 

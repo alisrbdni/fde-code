@@ -60,9 +60,11 @@ class TelnyxClient:
 
     _op: str = "telnyx"
 
-    async def _req(self, method: str, path: str, body: Any = None, resp_key: str = "data") -> Any:
+    INFERENCE_TIMEOUT = 60.0  # chat completions routinely take 10-30 s; the default 10 s cut them off
+
+    async def _req(self, method: str, path: str, body: Any = None, resp_key: str = "data", timeout: float = 15.0) -> Any:
         self._op = f"{method.upper()} {path}"
-        resp = await request(method, self._url(path), headers=self._headers, body=body)
+        resp = await request(method, self._url(path), headers=self._headers, body=body, timeout=timeout)
         return self._parse_json(resp, resp_key)
 
     async def create_assistant(self, payload: Dict[str, Any]) -> str:
@@ -109,7 +111,7 @@ class TelnyxClient:
                 "json_schema": {"name": "result", "schema": schema, "strict": True},
             },
         }
-        data = await self._req("POST", "/ai/openai/chat/completions", payload)
+        data = await self._req("POST", "/ai/openai/chat/completions", payload, timeout=self.INFERENCE_TIMEOUT)
         assert isinstance(data, dict)
         content = ""
         try:
@@ -127,7 +129,7 @@ class TelnyxClient:
         payload: Dict[str, Any] = {"model": model, "messages": messages}
         if tools:
             payload["tools"] = list(tools)
-        data = await self._req("POST", "/ai/openai/chat/completions", payload)
+        data = await self._req("POST", "/ai/openai/chat/completions", payload, timeout=self.INFERENCE_TIMEOUT)
         assert isinstance(data, dict)
         try:
             message = data["choices"][0]["message"]

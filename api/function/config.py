@@ -283,3 +283,10 @@ def override_values(settings: Settings, overrides: Optional[Dict[str, str]]) -> 
     for name, value in mapping.items():
         result[name] = "" if value is None else str(value)
     return result
+
+
+DEMO_PREFIX = "+1555019"  # public console chats get +1 555 019 xxxx (fictional range, distinct from test numbers)
+
+
+def is_demo_number(phone: Optional[str]) -> bool:
+    return bool(phone) and str(phone).startswith(DEMO_PREFIX)

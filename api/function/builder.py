@@ -291,8 +291,12 @@ async def run_jobs(app: Any, trace: Any, jobs: List[Dict[str, Any]]) -> List[Dic
         jtype = str(job.get("type"))
         try:
             if jtype == "test_call":
+                from .config import is_demo_number
+
                 if not (app.settings.texml_app_id and app.settings.forge_number):
                     raise PermanentError("outbound test calls are not configured")
+                if is_demo_number(job.get("owner")):
+                    raise PermanentError("the owner is a browser demo number; nothing to call")
                 async with trace.span("telnyx.ai_call"):
                     await app.telnyx.ai_call(
                         app.settings.texml_app_id,

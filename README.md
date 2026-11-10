@@ -18,6 +18,7 @@ Function (`forge-state`) hosting six **Stateful Actors**. The project was built 
 | What | Where |
 |---|---|
 | **Chat in your browser** (no login: Forge and Clara tabs; the 🎙 Voice button speaks and listens) | https://forge-api-3cb24047-7.telnyxcompute.com/ui |
+| **A sample agent Forge already built** ("Mia - Harbor Physio", rebuilt automatically when it expires) | console → **My agents** → ⭐ Mia: chat, or **📞 Call it in the browser** |
 | Call Forge by phone | **Pending**: number `+61 7 4285 4682` is awaiting Telnyx's Australian regulatory approval ([details](#getting-a-phone-number)) |
 | **Call in your browser** (real voice call to the Telnyx assistants over WebRTC, no phone needed) | https://forge-api-3cb24047-7.telnyxcompute.com/call |
 | Call Clara by phone | **Pending**: same as above |
@@ -109,6 +110,67 @@ curl -s $API/clinic/mcp -H "Authorization: Bearer $MCP_TOKEN" -H 'content-type: 
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 curl -s $API/clinic/mcp -H "Authorization: Bearer $MCP_TOKEN" -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"check_availability","arguments":{"specialty":"dermatology"}}}'
+```
+
+## Step by step (screenshots)
+Taken from the live deployment with headless Chromium (phone numbers are masked by the console itself).
+
+**1. Open the console: no login, no phone.** Forge's welcome is a *speak node*, read verbatim, with the AI disclosure.
+The workflow diagram on the right highlights where the conversation is.
+![Forge welcome](docs/screenshots/01-forge-welcome.png)
+
+**2. Describe your business.** Forge saves every answer through the MCP server (`save_draft`). Each tool call
+expands to show its arguments and result, and the variables panel shows what changed.
+![Forge interview](docs/screenshots/02-forge-interview.png)
+
+**3. "Yes, build it."** `check_draft` sets `draft_complete=true`, so a *variable comparison* edge moves to Review.
+`build_agent` creates a real Telnyx AI Assistant, and `build_status=ready` routes to Deliver. The chat offers
+**"Talk to it now"**.
+![Agent built](docs/screenshots/03-forge-built.png)
+
+**4. Talk to the agent you just built** (My agents tab, also no login). It greets callers with its own speak node,
+answers from its facts, and takes a message into the owner's inbox. **📞 Call it in the browser** opens a real
+voice call.
+![Talk to the new agent](docs/screenshots/04-my-agent-chat.png)
+
+**5. Clara triages and books.** Rules decide urgency, and `triage_urgency` routes the workflow. She offers real
+openings from the clinician's schedule actor and books atomically.
+![Clara triage](docs/screenshots/05-clinic-chat.png)
+![Clara booked](docs/screenshots/06-clinic-booked.png)
+
+**6. Behind the scenes (admin token).** Every generated agent, with its input, generated instructions, workflow,
+build-trace spans and messages:
+![Agents](docs/screenshots/07-agents-list.png)
+![Build trace](docs/screenshots/08-agent-build-trace.png)
+![Generated workflow](docs/screenshots/09-agent-workflow.png)
+
+The clinic's week (free and booked slots per clinician), bookings, callbacks and activity:
+![Clinic week](docs/screenshots/10-clinic-week-and-bookings.png)
+
+Ops: health checks, traffic, latency, recent errors with trace ids, KV flags, and a read-only **KV browser**:
+![Ops](docs/screenshots/11-ops-health-metrics.png)
+![KV browser](docs/screenshots/12-ops-kv-browser.png)
+
+**7. Call in the browser and the API reference.**
+![Browser call](docs/screenshots/13-call-in-browser.png)
+![API docs](docs/screenshots/14-api-docs.png)
+
+## How it works
+Diagrams for every part (the call-start webhook, KV and actors, MCP tool calls, the build pipeline, actor alarms and
+test calls, clinic booking, the browser paths and the trace id) are in **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**.
+Both workflows, generated from the deployed JSON, are in **[docs/workflows.md](docs/workflows.md)**.
+
+```mermaid
+flowchart LR
+  caller(["📞 Caller / 🌐 browser"]) --> asst["Telnyx AI Assistant<br/>Forge · Clara · generated agents<br/>conversation workflow"]
+  asst -- "dynamic variables webhook" --> api["forge-api<br/>Python Edge Function"]
+  asst -- "MCP tools/call" --> api
+  asst -- "webhook tools" --> api
+  api -- "REST" --> kv[("Telnyx KV<br/>flags · caches · sessions · agents")]
+  api -- "RPC" --> state["forge-state<br/>TS Edge Function"] --> actors[("Stateful Actors<br/>BuilderProfile · ClinicSchedule · ClinicPatient<br/>OpsMetrics · AgentRegistry · ClinicDesk")]
+  actors -. "alarm → /internal/jobs" .-> api
+  api -- "Assistants API · TeXML · Inference" --> telnyx["Telnyx APIs"]
+  api -- "SigV4" --> s3[("Cloud Storage")]
 ```
 
 ## Quick start (local, no keys needed)
