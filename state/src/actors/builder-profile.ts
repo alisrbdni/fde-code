@@ -121,7 +121,9 @@ export class BuilderProfile extends StatefulActor {
     const next = state.jobs.length ? Math.min(...state.jobs.map((j) => j.at)) : null
     state.alarmAt = next
     await this.ctx.storage.put("profile", state)
-    this.ctx.storage.setAlarm(next)
+    // The runtime only accepts a finite ms timestamp; passing null fails the whole invocation's commit.
+    if (next === null) await this.ctx.storage.deleteAlarm()
+    else await this.ctx.storage.setAlarm(next)
   }
 
   async startCall(owner: string, callId: string, attested: boolean, now: number) {

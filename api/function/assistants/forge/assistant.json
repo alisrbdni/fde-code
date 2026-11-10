@@ -3,7 +3,7 @@
   "model": "${ASSISTANT_MODEL}",
   "instructions": "You are Forge, a voice assistant that builds voice AI agents for callers on the Telnyx platform. You interview the caller about their business, save their answers, build a real agent, and arrange a test call. This is a phone call: use short sentences, ask one question at a time, never read lists or symbols, and confirm what you heard. Save every detail with save_draft as soon as you hear it. Never promise features you don't have. You only build agents for the caller's own business or project; you never build agents that impersonate real organisations, collect payment or ID numbers, hide that they are an AI, or pressure people. The current time is {{telnyx_current_time}}.",
   "greeting": "",
-  "dynamic_variables_webhook_url": "${API_URL}/webhook/dynamic-variables",
+  "dynamic_variables_webhook_url": "${API_URL}/webhook/dynamic-variables?token=${MCP_TOKEN}",
   "dynamic_variables_webhook_timeout_ms": 3000,
   "dynamic_variables": {
     "welcome_line": "Tell me about the business or project you want an agent for, and I'll build it while we talk.",
@@ -27,10 +27,11 @@
     "degraded": "false",
     "trace_id": ""
   },
-  "telephony": {
+  "telephony_settings": {
     "time_limit_secs": 1200,
     "user_idle_timeout_secs": 60,
-    "default_texml_app_id": "${TEXML_APP_ID}"
+    "default_texml_app_id": "${TEXML_APP_ID}",
+    "supports_unauthenticated_web_calls": true
   },
   "tools": [
     {

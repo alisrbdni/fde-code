@@ -288,6 +288,8 @@ async def take_message(
     from .drafts import _clean
 
     body = body or {}
+    if not app.settings.mcp_token and app.settings.require_tokens:
+        raise WebhookError(500, "MCP_TOKEN is not configured")  # never fall back to the dev secret in production
     if not _bearer_ok(generator.agent_token(app.settings.mcp_token, key), auth):
         raise WebhookError(401, "unauthorized")
     trace.set(agent_key=key)

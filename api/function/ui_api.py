@@ -57,11 +57,25 @@ async def handle(fn: Any, app: Any, req: Any, trace: Any):
         return _resp(200, html, content_type="text/html; charset=utf-8",
                      headers={"content-security-policy": CSP, "x-frame-options": "DENY",
                               "x-content-type-options": "nosniff", "cache-control": "no-store"})
+    if p == "/call" and m == "GET":
+        return _call_page(app)
     if not p.startswith("/ui/api/"):
         return _err(404, "not found")
-    if not _token_ok(app.settings.admin_token, req):
-        return _err(401, "admin token required")
     sub = p[len("/ui/api/"):]
+    if sub.startswith("public/"):
+        # Public demo: chat with Forge, Clara or a generated agent with no admin token. Each session gets its
+        # own random demo number, so a visitor can never reach anyone else's data; requests are rate-limited.
+        try:
+            body = req.json() if m == "POST" else {}
+        except ValueError:
+            return _err(400, "invalid JSON")
+        trace.set(console="public")
+        try:
+            return await _public(app, trace, m, sub[len("public/"):], body if isinstance(body, dict) else {}, req)
+        except simulator.SimError as exc:
+            return _err(exc.status, exc.message)
+    if not _token_ok(app.settings.admin_token, req, required=app.settings.require_tokens):
+        return _err(401, "admin token required")
     try:
         body = req.json() if m == "POST" else {}
     except ValueError:
@@ -472,4 +486,98 @@ def links(app: Any) -> Dict[str, Any]:
             {"label": "CLI reference", "url": "https://developers.telnyx.com/docs/edge-compute/reference/cli"},
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# public demo (no admin token) + browser voice call page
+# ---------------------------------------------------------------------------
+
+PUBLIC_LIMITS = {"start": (20, 600), "send": (60, 600)}  # (requests, per seconds) per client IP and instance
+_public_hits: Dict[str, List[float]] = {}
+
+
+def _client_ip(req: Any) -> str:
+    fwd = req.headers.get("x-forwarded-for", "")
+    return fwd.split(",")[0].strip() or req.headers.get("x-real-ip", "") or "unknown"
+
+
+def _rate_ok(req: Any, kind: str) -> bool:
+    limit, window = PUBLIC_LIMITS[kind]
+    key = f"{kind}:{_client_ip(req)}"
+    now = time.monotonic()
+    hits = [t for t in _public_hits.get(key, []) if now - t < window]
+    if len(hits) >= limit:
+        _public_hits[key] = hits
+        return False
+    hits.append(now)
+    _public_hits[key] = hits
+    if len(_public_hits) > 5000:
+        _public_hits.pop(next(iter(_public_hits)))
+    return True
+
+
+def _demo_phone() -> str:
+    # +1 555 010 xxxx is reserved for fiction: never a real person's number.
+    return "+1555010" + "".join(secrets.choice("0123456789") for _ in range(4))
+
+
+async def _public(app: Any, trace: Any, m: str, sub: str, body: Dict[str, Any], req: Any):
+    parts = sub.split("/")
+    if sub == "config" and m == "GET":
+        return _resp(200, {
+            "admin_token_required": bool(app.settings.admin_token or app.settings.require_tokens),
+            "forge_assistant_id": app.settings.forge_assistant_id,
+            "clinic_assistant_id": app.settings.clinic_assistant_id,
+            "call_page": "/call",
+        })
+    if parts[0] == "flow" and len(parts) == 2 and parts[1] in ("forge", "clinic") and m == "GET":
+        adef = await simulator.get_def(app, trace, parts[1])
+        return _resp(200, {"id": adef.id, "name": adef.name, "flow": adef.flow, "node_tools": adef.node_tools,
+                           "defaults": adef.defaults, "instructions": adef.instructions,
+                           "tools": [{"name": t.name, "kind": t.kind, "description": t.description}
+                                     for t in adef.tools.values()]})
+    engine = simulator.Engine(app, trace)
+    if sub == "chat/start" and m == "POST":
+        if not _rate_ok(req, "start"):
+            return _err(429, "too many new chats from this address; try again in a few minutes")
+        assistant = str(body.get("assistant") or "forge")
+        if assistant not in ("forge", "clinic") and not AGENT_KEY.match(assistant):
+            return _err(400, "assistant must be forge, clinic or an agent key")
+        s = await engine.start(assistant, _demo_phone())
+        s["public"] = True
+        await simulator.save(app, s)
+        return _resp(200, await _chat_view(app, trace, s, engine.new_events))
+    if sub == "chat/send" and m == "POST":
+        if not _rate_ok(req, "send"):
+            return _err(429, "too many messages from this address; slow down a little")
+        s = await simulator.load(app, str(body.get("session_id") or ""))
+        if not s.get("public"):
+            return _err(403, "not a public session")
+        s = await engine.send(s, str(body.get("text") or ""))
+        return _resp(200, await _chat_view(app, trace, s, engine.new_events))
+    if parts[0] == "chat" and len(parts) == 2 and m == "GET":
+        s = await simulator.load(app, parts[1])
+        if not s.get("public"):
+            return _err(403, "not a public session")
+        return _resp(200, await _chat_view(app, trace, s, s["events"]))
+    return _err(404, "not found")
+
+
+CALL_CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; "
+            "img-src 'self' data: blob: https:; font-src 'self' data: https:; frame-ancestors 'none'")
+CALL_PAGE = Path(__file__).resolve().parent / "static" / "call.html"
+
+
+def _call_page(app: Any):
+    try:
+        html = CALL_PAGE.read_text()
+    except OSError:
+        html = "<!doctype html><title>Call</title><p>call.html is missing."
+    for name, value in (("FORGE_ID", app.settings.forge_assistant_id), ("CLINIC_ID", app.settings.clinic_assistant_id)):
+        safe = re.sub(r"[^A-Za-z0-9_-]", "", value or "")
+        html = html.replace("{{" + name + "}}", safe)
+    return _resp(200, html, content_type="text/html; charset=utf-8",
+                 headers={"content-security-policy": CALL_CSP, "x-content-type-options": "nosniff",
+                          "permissions-policy": "microphone=(self)", "cache-control": "no-store"})
 

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Call Forge or Clara</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--fg:#1c2230;--muted:#5f6878;--line:#e2e5eb;--accent:#0b6bcb;--accent-fg:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1217;--panel:#171b22;--fg:#e5e8ee;--muted:#9aa3b2;--line:#2a303b;--accent:#58a6ff;--accent-fg:#0b0f14}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px}
+h1{font-size:22px;margin:0 0 4px}
+p{margin:6px 0}.muted{color:var(--muted)}
+.grid{display:grid;gap:12px;grid-template-columns:1fr;margin-top:16px}
+@media (min-width:640px){.grid{grid-template-columns:1fr 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{font-size:17px;margin:0 0 6px}
+button{font:inherit;background:var(--accent);color:var(--accent-fg);border:0;border-radius:8px;padding:9px 14px;cursor:pointer;margin-top:8px}
+button:disabled{opacity:.5;cursor:default}
+ul{margin:6px 0 0;padding-left:18px}
+#stage{margin-top:16px}
+a{color:var(--accent)}
+code{font:13px ui-monospace,monospace}
+</style>
+</head>
+<body>
+<main>
+  <h1>Talk to Forge or Clara in your browser</h1>
+  <p class="muted">A real voice call to the Telnyx AI Assistant over WebRTC, with no phone number needed. Your browser
+    will ask for the microphone. Calls are handled by Telnyx; this page never holds an API key.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Forge: build a voice agent</h2>
+      <p>Describe your business. Forge interviews you, then builds a real AI phone agent.</p>
+      <ul class="muted"><li>"I run Sunrise Dental and want a receptionist."</li><li>"Yes, build it."</li></ul>
+      <button id="call-forge" data-agent="{{FORGE_ID}}">Start call with Forge</button>
+    </div>
+    <div class="card">
+      <h2>Clara: Northside Family Clinic</h2>
+      <p>Describe what's wrong; she routes you to the right specialist and books a visit.</p>
+      <ul class="muted"><li>"My knee hurts when I run."</li><li>"Can I cancel my appointment?"</li></ul>
+      <button id="call-clinic" data-agent="{{CLINIC_ID}}">Start call with Clara</button>
+    </div>
+  </div>
+
+  <div id="stage"></div>
+  <p class="muted" id="note"></p>
+  <p class="muted">Prefer typing? Use the chat in the <a href="/ui">console</a>, which works without a token.
+    Its <b>Voice</b> button speaks and listens in your browser.</p>
+</main>
+<script>
+"use strict";
+const WIDGET = "https://unpkg.com/@telnyx/ai-agent-widget@0.36.0";
+let loaded = null;
+function loadWidget() {
+  if (loaded) return loaded;
+  loaded = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = WIDGET; s.async = true; s.onload = resolve; s.onerror = () => reject(new Error("could not load the Telnyx widget"));
+    document.head.appendChild(s);
+  });
+  return loaded;
+}
+async function start(agentId, name) {
+  const stage = document.getElementById("stage"), note = document.getElementById("note");
+  note.textContent = "Loading the Telnyx call widget…";
+  try { await loadWidget(); } catch (e) { note.textContent = e.message; return; }
+  while (stage.firstChild) stage.removeChild(stage.firstChild);
+  const el = document.createElement("telnyx-ai-agent");
+  el.setAttribute("agent-id", agentId);
+  el.addEventListener("agent.error", (ev) => { note.textContent = "Call error: " + ((ev.detail && (ev.detail.message || ev.detail.error)) || "see the browser console"); });
+  el.addEventListener("agent.disconnected", () => { note.textContent = "Call ended."; });
+  stage.appendChild(el);
+  note.textContent = "Press the call button in the widget to talk to " + name + ".";
+}
+for (const [id, name] of [["call-forge", "Forge"], ["call-clinic", "Clara"]]) {
+  const btn = document.getElementById(id);
+  const agent = btn.dataset.agent;
+  if (!agent) {
+    btn.disabled = true;
+    btn.textContent = name + ": not created on Telnyx yet";
+    continue;
+  }
+  btn.onclick = () => start(agent, name);
+}
+</script>
+</body>
+</html>

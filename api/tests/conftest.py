@@ -44,7 +44,7 @@ REMOTE = bool(STATE_URL_TEST)
 CLEARED = (
     "TELNYX_API_KEY", "KV_NAMESPACE_ID", "STATE_URL", "STATE_TOKEN", "MCP_TOKEN", "ADMIN_TOKEN",
     "STORAGE_ENDPOINT", "STORAGE_ACCESS_KEY", "CLINIC_ASSISTANT_ID", "CLINIC_FRONT_DESK_NUMBER",
-    "FORGE_DRY_RUN", "VERIFY_SIGNATURES", "CHAT_MODEL",
+    "FORGE_DRY_RUN", "VERIFY_SIGNATURES", "CHAT_MODEL", "REQUIRE_TOKENS", "FORGE_ASSISTANT_ID",
 )
 
 local_only = pytest.mark.skipif(REMOTE, reason="uses the emulator's alarm internals (local only)")
@@ -53,7 +53,8 @@ local_only = pytest.mark.skipif(REMOTE, reason="uses the emulator's alarm intern
 def make_app(**env: str) -> App:
     for name in CLEARED:
         os.environ.pop(name, None)
-    os.environ.update({"TEXML_APP_ID": "texml-test", "FORGE_NUMBER": "+15550100000", "API_URL": "https://forge.test"})
+    os.environ.update({"TEXML_APP_ID": "texml-test", "FORGE_NUMBER": "+15550100000", "API_URL": "https://forge.test",
+                       "REQUIRE_TOKENS": "false"})  # local-dev behaviour; test_tokens_required covers production
     os.environ.update(env)
     state: Any = LocalState() if not REMOTE else Isolated(RemoteState(STATE_URL_TEST, STATE_TOKEN_TEST))
     app = App(load_settings(), kv=MemoryKV(), state=state, telnyx=FakeTelnyx(), storage=MemoryStorage())

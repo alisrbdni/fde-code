@@ -337,7 +337,7 @@ def full_payload(
         "model": settings.assistant_model,
         "greeting": "",
         "voice_settings": {"voice": VOICES.get(fields.get("voice") or "warm", VOICES["warm"])["voice"]},
-        "telephony": {
+        "telephony_settings": {
             "time_limit_secs": 600,
             "user_idle_timeout_secs": 60,
             "default_texml_app_id": settings.texml_app_id,
@@ -380,5 +380,5 @@ def at_level(
         "name": trimmed["name"],
         "instructions": trimmed["instructions"],
         "greeting": spoken,
-        "telephony": trimmed.get("telephony"),
+        "telephony_settings": trimmed.get("telephony_settings"),
     }

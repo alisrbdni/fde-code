@@ -31,6 +31,9 @@ DEFAULTS: Dict[str, str] = {
     "CLINIC_ASSISTANT_ID": "",
     "CLINIC_FRONT_DESK_NUMBER": "",
     "CLINIC_UTC_OFFSET": "-05:00",
+    # "true" / "false"; empty = auto: required whenever API_URL is https:// (a public deployment)
+    "REQUIRE_TOKENS": "",
+    "FORGE_ASSISTANT_ID": "",
     # Flagged as blanks on purpose (a real deployment provides them):
     "TELNYX_API_KEY": "",
     "KV_NAMESPACE_ID": "",
@@ -65,6 +68,7 @@ OVERRIDABLE: Dict[str, Dict[str, Any]] = {
     "STORAGE_SECRET_KEY": {"secret": True, "label": "S3 secret key"},
     "CLINIC_ASSISTANT_ID": {"secret": False, "label": "Clara's assistant id (Forge hands off to it)"},
     "CLINIC_FRONT_DESK_NUMBER": {"secret": False, "label": "Clinic front desk number for transfers"},
+    "FORGE_ASSISTANT_ID": {"secret": False, "label": "Forge's assistant id (browser voice calls)"},
 }
 
 
@@ -114,6 +118,8 @@ class Settings:
     clinic_assistant_id: str
     clinic_front_desk_number: str
     clinic_utc_offset: str
+    require_tokens: bool = False
+    forge_assistant_id: str = ""
 
     @property
     def local_kv(self) -> bool:
@@ -192,8 +198,17 @@ def load_settings(overrides: Optional[Dict[str, str]] = None) -> Settings:
         clinic_assistant_id=val("CLINIC_ASSISTANT_ID")[0],
         clinic_front_desk_number=val("CLINIC_FRONT_DESK_NUMBER")[0],
         clinic_utc_offset=val("CLINIC_UTC_OFFSET")[0],
+        require_tokens=_require_tokens(val("REQUIRE_TOKENS")[0], val("API_URL")[0]),
+        forge_assistant_id=val("FORGE_ASSISTANT_ID")[0],
     )
     return settings
+
+
+def _require_tokens(flag: str, api_url: str) -> bool:
+    """Fail closed on a public deployment: a missing token must refuse requests, never open the route."""
+    if str(flag).strip().lower() in ("true", "false"):
+        return _to_bool(flag)
+    return str(api_url).startswith("https://")
 
 
 def normalize_phone(raw: Any) -> Optional[str]:
@@ -263,6 +278,7 @@ def override_values(settings: Settings, overrides: Optional[Dict[str, str]]) -> 
         "STORAGE_SECRET_KEY": settings.storage_secret_key,
         "CLINIC_ASSISTANT_ID": settings.clinic_assistant_id,
         "CLINIC_FRONT_DESK_NUMBER": settings.clinic_front_desk_number,
+        "FORGE_ASSISTANT_ID": settings.forge_assistant_id,
     }
     for name, value in mapping.items():
         result[name] = "" if value is None else str(value)

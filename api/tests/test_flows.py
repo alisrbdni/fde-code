@@ -607,3 +607,38 @@ async def test_rest_kv_wire_format(monkeypatch):
     assert await kv.get("flags/global") == '{"a": 1}'
     await kv.delete("flags/global")
     assert await kv.get("flags/global") is None
+
+
+async def test_tokens_required_on_public_deployment():
+    """REQUIRE_TOKENS (auto-on for https API_URL): a missing secret refuses, never opens the route."""
+    app = make_app(REQUIRE_TOKENS="true")
+    client = Client(Function(app))
+    call = client.call_payload(OWNER, "v3:closed")
+    assert (await client.post("/webhook/dynamic-variables", call)).status == 401
+    assert (await client.post("/clinic/webhook/dynamic-variables", call)).status == 401
+    assert (await client.rpc("tools/list")).status == 401
+    assert (await client.get("/ui/api/overview")).status == 401
+    assert (await client.post("/internal/jobs", {"jobs": []})).status in (401, 500)
+    resp = await client.post("/agents/ag12345678/tools/take-message", {"message": "hi"},
+                             headers={"authorization": "Bearer " + generator.agent_token("", "ag12345678")})
+    assert resp.status == 500  # no dev-secret fallback in production
+    assert (await client.get("/health")).status == 200
+
+
+async def test_variables_webhook_needs_token_when_set():
+    app = make_app(MCP_TOKEN="mcp-secret", REQUIRE_TOKENS="true")
+    client = Client(Function(app))
+    call = client.call_payload(OWNER, "v3:tok")
+    assert (await client.post("/webhook/dynamic-variables", call)).status == 401
+    ok = await client.post("/webhook/dynamic-variables?token=mcp-secret", call)
+    assert ok.status == 200 and ok.json["dynamic_variables"]["caller_phone"] == OWNER
+    assert (await client.post("/clinic/webhook/dynamic-variables?token=mcp-secret", call)).status == 200
+
+
+def test_require_tokens_auto_from_api_url(monkeypatch):
+    from function.config import load_settings
+    monkeypatch.delenv("REQUIRE_TOKENS", raising=False)
+    monkeypatch.setenv("API_URL", "https://forge-api-x.telnyxcompute.com")
+    assert load_settings().require_tokens is True
+    monkeypatch.setenv("API_URL", "http://localhost:8080")
+    assert load_settings().require_tokens is False

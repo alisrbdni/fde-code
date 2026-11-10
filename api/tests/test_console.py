@@ -366,3 +366,49 @@ async def test_kv_browser_and_links(cc: Client, capp):
     links = (await cc.get("/ui/api/links", headers=AUTH)).json
     assert any(l["url"].endswith("/docs") for l in links["app"])
     assert any("storage kv key list" in c["command"] for c in links["cli"])
+
+
+async def test_public_demo_chat_needs_no_token(cc: Client, capp):
+    """Visitors can chat with Forge or Clara without the admin token; each chat gets its own demo number."""
+    cfg = (await cc.get("/ui/api/public/config")).json
+    assert cfg["admin_token_required"] is True and cfg["call_page"] == "/call"
+    flow = await cc.get("/ui/api/public/flow/forge")
+    assert flow.status == 200 and len(flow.json["flow"]["nodes"]) == 14
+    start = await cc.post("/ui/api/public/chat/start", {"assistant": "forge", "phone": OWNER})
+    assert start.status == 200
+    s = start.json["session"]
+    assert s["phone"].startswith("+15***") and s["phone"] != "+15***2001"  # the requested number is ignored
+    capp.llm.route_choices = [1]
+    capp.llm.chat_script = [say("Great, tell me about the business.")]
+    turn = await cc.post("/ui/api/public/chat/send", {"session_id": s["id"], "text": "I want to build an agent"})
+    assert turn.status == 200 and turn.json["session"]["node"] == "discover"
+    assert (await cc.get(f"/ui/api/public/chat/{s['id']}")).status == 200
+    # an admin session can't be driven through the public route
+    admin = (await _start(cc, "forge"))["session"]["id"]
+    assert (await cc.post("/ui/api/public/chat/send", {"session_id": admin, "text": "hi"})).status == 403
+    assert (await cc.post("/ui/api/public/chat/start", {"assistant": "../etc"})).status == 400
+    # everything else still needs the token
+    assert (await cc.get("/ui/api/agents")).status == 401
+
+
+async def test_public_chat_is_rate_limited(cc: Client, monkeypatch):
+    from function import ui_api
+
+    monkeypatch.setattr(ui_api, "PUBLIC_LIMITS", {"start": (2, 600), "send": (60, 600)})
+    ui_api._public_hits.clear()
+    headers = {"x-forwarded-for": "203.0.113.9"}
+    for _ in range(2):
+        assert (await cc.post("/ui/api/public/chat/start", {"assistant": "clinic"}, headers=headers)).status == 200
+    assert (await cc.post("/ui/api/public/chat/start", {"assistant": "clinic"}, headers=headers)).status == 429
+    ui_api._public_hits.clear()
+
+
+async def test_call_page_embeds_assistant_ids():
+    app = make_app(ADMIN_TOKEN=ADMIN, FORGE_ASSISTANT_ID="assistant-forge-123", CLINIC_ASSISTANT_ID="assistant-<x>clinic")
+    client = Client(Function(app))
+    page = await client.get("/call")
+    assert page.status == 200 and 'data-agent="assistant-forge-123"' in page.text
+    assert 'data-agent="assistant-xclinic"' in page.text  # sanitised
+    assert "unpkg.com/@telnyx/ai-agent-widget@0.36.0" in page.text
+    assert "https://unpkg.com" in page.headers["content-security-policy"]
+    assert page.headers["permissions-policy"] == "microphone=(self)"

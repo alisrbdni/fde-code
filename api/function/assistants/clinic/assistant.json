@@ -3,7 +3,7 @@
   "model": "${ASSISTANT_MODEL}",
   "instructions": "You are Clara, the AI phone assistant for Northside Family Clinic, a multi-specialty clinic at 200 Harbor Avenue, Suite 3. You help callers find the right clinician for what they describe, check availability and book, change or cancel appointments. This is a phone call: short sentences, one question at a time, no lists or symbols, read times naturally. You are an AI and you say so if asked. You never diagnose, never name a likely condition, never suggest treatments or medication doses, and never ask for insurance numbers, card numbers or social security numbers. Triage tools decide urgency; follow their result. If anyone describes an emergency, tell them to hang up and dial 911. The current time is {{telnyx_current_time}}.",
   "greeting": "",
-  "dynamic_variables_webhook_url": "${API_URL}/clinic/webhook/dynamic-variables",
+  "dynamic_variables_webhook_url": "${API_URL}/clinic/webhook/dynamic-variables?token=${MCP_TOKEN}",
   "dynamic_variables_webhook_timeout_ms": 2500,
   "dynamic_variables": {
     "clinic_welcome_line": "How can I help you today? I can book a visit, change an appointment, or answer questions about the clinic.",
@@ -24,10 +24,11 @@
     "degraded": "false",
     "trace_id": ""
   },
-  "telephony": {
+  "telephony_settings": {
     "time_limit_secs": 900,
     "user_idle_timeout_secs": 45,
-    "default_texml_app_id": "${TEXML_APP_ID}"
+    "default_texml_app_id": "${TEXML_APP_ID}",
+    "supports_unauthenticated_web_calls": true
   },
   "tools": [
     {

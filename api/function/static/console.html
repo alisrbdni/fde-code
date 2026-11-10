@@ -83,12 +83,17 @@ svg text{font:12px system-ui,sans-serif}
   <h1>Agent Forge</h1>
   <nav id="nav">
     <a href="#forge" data-tab="forge">Forge</a><a href="#agents" data-tab="agents">Agents</a>
-    <a href="#clinic" data-tab="clinic">Clinic</a><a href="#ops" data-tab="ops">Ops</a><a href="#settings" data-tab="settings">Settings</a>
+    <a href="#clinic" data-tab="clinic">Clinic</a><a href="#ops" data-tab="ops">Ops</a><a href="#settings" data-tab="settings">Settings</a><a href="/call" target="_blank" rel="noopener">📞 Call in browser</a>
   </nav>
   <div class="chips" id="chips"></div>
 </header>
 <main>
-  <div id="authwarn" class="card hidden"><b>Admin token needed.</b> <span class="muted">Paste it in the Settings tab.</span></div>
+  <div id="authwarn" class="card hidden">
+    <b>This tab needs the admin token.</b>
+    <span class="muted">It's <code>ADMIN_TOKEN</code> from the server's <code>.env</code>, not your Telnyx API key.
+      Chat in the Forge and Clinic tabs works without it.</span>
+    <div class="row" style="margin-top:6px"><input id="authwarn-token" type="password" placeholder="paste ADMIN_TOKEN"><button id="authwarn-save">Unlock</button><span class="small" id="authwarn-msg"></span></div>
+  </div>
 
   <section class="tab" id="tab-forge">
     <div class="grid chatflow">
@@ -175,7 +180,9 @@ New patient cleanings are 99 dollars</textarea>
 
   <section class="tab" id="tab-settings">
     <div class="card"><h2>Admin token</h2>
-      <div class="row"><input id="admin-token" type="password" placeholder="ADMIN_TOKEN"><button id="admin-save">Save in this browser</button><span class="small muted">Stored in localStorage; sent as a Bearer token.</span></div>
+      <div class="row"><input id="admin-token" type="password" placeholder="ADMIN_TOKEN (from the server's .env)"><button id="admin-save">Check and save</button><button class="ghost" id="admin-clear">Forget</button></div>
+      <div class="small" id="admin-msg" style="margin-top:6px"></div>
+      <div class="small muted">Not your Telnyx API key: it's the <code>ADMIN_TOKEN</code> value (<code>grep ADMIN_TOKEN .env</code>). Stored in this browser only and sent as a Bearer token.</div>
     </div>
     <div class="card" style="margin-top:12px"><h2>Settings overrides <span class="small muted">memory only: lost on restart, never logged or written to KV</span></h2>
       <div class="scroll"><table id="settings-table"></table></div>
@@ -191,14 +198,32 @@ function h(tag,attrs,...kids){const el=document.createElement(tag);for(const [k,
 function clear(el){while(el.firstChild)el.removeChild(el.firstChild);return el}
 function fmtTime(ms){if(!ms)return'';const d=new Date(ms);return d.toLocaleString()}
 function json(v){return JSON.stringify(v,null,2)}
+/* Admin token: kept in localStorage, with an in-memory fallback when storage is blocked. AUTH.ok is the last
+   server verdict (true = accepted, false = rejected or missing, null = not checked yet). */
+const AUTH={mem:'',ok:null,get(){return LS.get('adminToken','')||this.mem},set(v){this.mem=v;if(v)LS.set('adminToken',v);else LS.del('adminToken')}};
+function cleanToken(v){return String(v||'').trim().replace(/^ADMIN_TOKEN\s*=\s*/i,'').replace(/^bearer\s+/i,'').replace(/^["'`]+|["'`]+$/g,'').trim()}
+function isAdmin(){return AUTH.ok===true}
 async function api(path,opts){
-  opts=opts||{};const headers={'content-type':'application/json'};const tok=LS.get('adminToken','');if(tok)headers.authorization='Bearer '+tok;
+  opts=opts||{};const headers={'content-type':'application/json'};const tok=AUTH.get();
+  if(tok&&!path.startsWith('public/'))headers.authorization='Bearer '+tok;
   const r=await fetch('/ui/api/'+path,{method:opts.body?'POST':'GET',headers,body:opts.body?JSON.stringify(opts.body):undefined});
   let data=null;try{data=await r.json()}catch(e){}
-  if(r.status===401){$('authwarn').classList.remove('hidden')}
+  if(r.status===401&&!path.startsWith('public/')){AUTH.ok=false;if(!opts.quiet)$('authwarn').classList.remove('hidden')}
   if(!r.ok){const e=new Error((data&&data.error)||('HTTP '+r.status));e.status=r.status;throw e}
-  $('authwarn').classList.add('hidden');return data;
+  if(!path.startsWith('public/')){AUTH.ok=true;$('authwarn').classList.add('hidden')}
+  return data;
 }
+/* Check a token against the server and explain the result. */
+async function checkToken(raw,msgEl){
+  const tok=cleanToken(raw);
+  if(!tok){AUTH.set('');AUTH.ok=false;if(msgEl)msgEl.textContent='Cleared.';return false}
+  const r=await fetch('/ui/api/overview',{headers:{authorization:'Bearer '+tok}}).catch(()=>null);
+  if(r&&r.ok){AUTH.set(tok);AUTH.ok=true;$('authwarn').classList.add('hidden');if(msgEl){msgEl.textContent='✓ Accepted. Admin tabs unlocked.';msgEl.className='small'}return true}
+  AUTH.ok=false;
+  if(msgEl){msgEl.className='small err';msgEl.textContent=!r?'✗ Could not reach the server.':/^KEY[A-Za-z0-9_]{10,}/.test(tok)?'✗ That looks like a Telnyx API key. Paste the ADMIN_TOKEN value from .env instead.':'✗ Rejected ('+r.status+'). Check you copied the whole ADMIN_TOKEN value from .env.'}
+  return false;
+}
+function flowPath(id){return isAdmin()?'flow/'+id:(id==='forge'||id==='clinic')?'public/flow/'+id:null}
 
 /* ---------- tabs ---------- */
 const tabs=['forge','agents','clinic','ops','settings'];let current='forge';const onShow={};
@@ -262,7 +287,27 @@ function createChat(root,opts){
   const startBtn=h('button',{onclick:()=>start()},'Start call');const hang=h('button',{class:'ghost',onclick:()=>{if(st.session){st.session.ended=true;addEvt('Call ended in the console.');input.disabled=true;send.disabled=true}}},'Hang up');
   const transcript=h('div',{class:'transcript'});const input=h('input',{placeholder:'Say something...',disabled:true,onkeydown:e=>{if(e.key==='Enter')go()}});
   const send=h('button',{disabled:true,onclick:()=>go()},'Send');const status=h('span',{class:'small muted'});
-  root.append(h('h2',{},opts.title,status),h('div',{class:'row'},phone,startBtn,hang),transcript,h('div',{class:'row',style:'margin-top:6px'},input,send));
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const voiceBtn=h('button',{class:'ghost',disabled:!SR,title:SR?'Speak to the assistant and hear its replies (browser speech)':'Voice needs Chrome, Edge or Safari',onclick:()=>toggleVoice()},'🎙 Voice');
+  const modeNote=h('div',{class:'small muted'});
+  root.append(h('h2',{},opts.title,status),h('div',{class:'row'},phone,startBtn,hang,voiceBtn),modeNote,transcript,h('div',{class:'row',style:'margin-top:6px'},input,send));
+  let voice=false,rec=null,speaking=false,busy=false;
+  function toggleVoice(){voice=!voice;voiceBtn.textContent=voice?'⏹ Stop voice':'🎙 Voice';
+    if(!voice){try{rec&&rec.abort()}catch(e){}if(window.speechSynthesis)speechSynthesis.cancel();return}
+    if(!st.session||st.session.ended)start();else listen()}
+  function listen(){if(!voice||speaking||busy||!st.session||st.session.ended)return;
+    try{rec=new SR()}catch(e){addEvt('Voice is not available in this browser.');return}
+    rec.lang=navigator.language||'en-US';rec.interimResults=true;rec.maxAlternatives=1;let done=false;
+    rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;input.value=t;
+      if(e.results[e.results.length-1].isFinal&&!done){done=true;go()}};
+    rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){addEvt('Microphone blocked: allow it for this site to use voice.');if(voice)toggleVoice()}};
+    rec.onend=()=>{if(voice&&!done&&!busy&&!speaking)setTimeout(listen,250)};
+    try{rec.start();input.placeholder='Listening… (speak now)'}catch(e){}}
+  function speakEvents(events){if(!voice)return;const texts=(events||[]).filter(e=>e.type==='assistant'||e.type==='speak').map(e=>e.text).filter(Boolean);
+    if(!texts.length||!window.speechSynthesis){listen();return}
+    speaking=true;speechSynthesis.cancel();let left=texts.length;
+    const finish=()=>{if(--left<=0){speaking=false;listen()}};
+    for(const t of texts){const u=new SpeechSynthesisUtterance(t);u.lang=navigator.language||'en-US';u.onend=finish;u.onerror=finish;speechSynthesis.speak(u)}}
   function addEvt(t){transcript.appendChild(h('div',{class:'evt'},t))}
   function render(events){for(const ev of events){let el=null;
     if(ev.type==='user')el=h('div',{class:'bubble user'},ev.text);
@@ -278,11 +323,21 @@ function createChat(root,opts){
     transcript.scrollTop=transcript.scrollHeight}
   async function update(data){st.prevVars=st.session?st.session.vars:{};st.session=data.session;render(data.events||[]);
     const ended=st.session.ended;input.disabled=ended;send.disabled=ended;status.textContent=' '+st.session.assistant_name+' · '+(st.session.node_name||st.session.node)+(ended?' · ended':'');
-    if(!st.flow||st.flow.id!==st.session.assistant){st.flow=await api('flow/'+st.session.assistant)}
+    const fp=flowPath(st.session.assistant);
+    if(fp&&(!st.flow||st.flow.id!==st.session.assistant)){try{st.flow=await api(fp)}catch(e){st.flow=null}}
+    if(!st.flow)st.flow={id:st.session.assistant,flow:{start_node_id:'',nodes:[],edges:[]},node_tools:null};
     opts.onUpdate&&opts.onUpdate(st)}
-  async function start(){clear(transcript);st.session=null;startBtn.disabled=true;try{await update(await api('chat/start',{body:{assistant:opts.assistant(),phone:phone.value}}));input.focus()}catch(e){addEvt('Error: '+e.message)}finally{startBtn.disabled=false}}
-  async function go(){const text=input.value.trim();if(!text||!st.session)return;input.value='';send.disabled=true;
-    try{await update(await api('chat/send',{body:{session_id:st.session.id,text}}))}catch(e){addEvt('Error: '+e.message);send.disabled=false}}
+  async function start(){clear(transcript);st.session=null;startBtn.disabled=true;
+    // Admin token: full console chat with your chosen caller ID. Without it: the public demo chat (no token
+    // needed; the server assigns a fresh demo number, so you only ever see your own conversation).
+    st.public=!isAdmin()&&opts.assistant().length>0;
+    phone.disabled=st.public;modeNote.textContent=st.public?'Public demo chat: a fresh demo caller number is assigned to each chat. Add the admin token in Settings to choose the caller ID.':'';
+    try{const data=await api(st.public?'public/chat/start':'chat/start',{body:{assistant:opts.assistant(),phone:phone.value}});await update(data);input.focus();speakEvents(data.events)}
+    catch(e){addEvt('Error: '+e.message)}finally{startBtn.disabled=false}}
+  async function go(){const text=input.value.trim();if(!text||!st.session)return;input.value='';send.disabled=true;busy=true;
+    try{const data=await api(st.public?'public/chat/send':'chat/send',{body:{session_id:st.session.id,text}});busy=false;await update(data);speakEvents(data.events)}
+    catch(e){busy=false;addEvt('Error: '+e.message);send.disabled=false;listen()}
+    finally{busy=false;input.placeholder='Say something...'}}
   return st;
 }
 function renderVars(table,st){clear(table);table.append(h('tr',{},h('th',{},'variable'),h('th',{},'value')));
@@ -294,7 +349,7 @@ let forgeFlow=null;
 const forgeChat=createChat($('forge-chat'),{title:'Talk to Forge',phone:'+15550102001',assistant:()=>'forge',onUpdate:st=>{
   forgeFlow=st.flow;renderFlow($('forge-flow'),st.flow.flow,st.session,n=>nodeInfo($('forge-node'),st.flow,n));renderVars($('forge-vars'),st);
   const d=st.session.draft;clear($('forge-draft'));if(d&&Object.keys(d).length)$('forge-draft').append(kv(d));else $('forge-draft').textContent='Empty draft.'}});
-async function loadForgeFlow(){if(forgeFlow)return;try{forgeFlow=await api('flow/forge');renderFlow($('forge-flow'),forgeFlow.flow,null,n=>nodeInfo($('forge-node'),forgeFlow,n));$('forge-flow-meta').textContent=forgeFlow.flow.nodes.length+' nodes · '+forgeFlow.flow.edges.length+' edges'}catch(e){}}
+async function loadForgeFlow(){if(forgeFlow)return;try{forgeFlow=await api(flowPath('forge'));renderFlow($('forge-flow'),forgeFlow.flow,null,n=>nodeInfo($('forge-node'),forgeFlow,n));$('forge-flow-meta').textContent=forgeFlow.flow.nodes.length+' nodes · '+forgeFlow.flow.edges.length+' edges'}catch(e){}}
 for(const t of['receptionist','appointments','faq','restaurant','events','lead_intake'])$('fb-template').append(h('option',{},t));
 $('fb-go').onclick=async()=>{$('fb-status').textContent='building...';clear($('fb-steps'));
   const fields={business_name:$('fb-business').value,agent_name:$('fb-agent').value,template:$('fb-template').value,voice:$('fb-voice').value,tone:$('fb-tone').value,hours:$('fb-hours').value,facts:$('fb-facts').value.split('\n').map(s=>s.trim()).filter(Boolean)};
@@ -335,7 +390,7 @@ createChat($('clinic-chat'),{title:'Talk to Clara',phone:'+15550103001',assistan
   const p=st.session.patient;const box=clear($('clinic-patient'));if(p){box.append(kv({phone:p.phone,name:p.name,calls:p.calls,last_triage:p.lastTriage?p.lastTriage.urgency+' / '+p.lastTriage.specialty:''}));
     box.append(h('table',{},(p.appointments||[]).map(x=>h('tr',{},h('td',{},x.spoken||x.slot),h('td',{},x.status)))))}
   if(st.session.vars.booking_status==='confirmed')loadClinic()}});
-async function loadClinicFlow(){if(clinicFlow)return;try{clinicFlow=await api('flow/clinic');renderFlow($('clinic-flow'),clinicFlow.flow,null,n=>nodeInfo($('clinic-node'),clinicFlow,n))}catch(e){}}
+async function loadClinicFlow(){if(clinicFlow)return;try{clinicFlow=await api(flowPath('clinic'));renderFlow($('clinic-flow'),clinicFlow.flow,null,n=>nodeInfo($('clinic-node'),clinicFlow,n))}catch(e){}}
 const dayKey=d=>d.toISOString().slice(0,10);
 async function loadClinic(){try{clinicData=await api('clinic');const d=clinicData;
   $('clinic-flags').textContent='bookings '+(d.flags.bookings_enabled?'on':'paused')+' · window '+d.flags.booking_window_days+' d · notice '+d.flags.min_notice_minutes+' min · desk '+(d.desk_open?'open':'closed');
@@ -415,16 +470,19 @@ async function applySettings(values,quiet){try{await api('settings',{body:{value
   if(!quiet)$('settings-msg').textContent='Applied.';await loadSettings();loadOverview()}catch(e){$('settings-msg').textContent='Error: '+e.message}}
 $('settings-apply').onclick=()=>{const values={};for(const[k,inp]of Object.entries(settingsInputs))if(inp.value.trim())values[k]=inp.value.trim();applySettings(values)};
 $('settings-remember').onchange=e=>{if(!e.target.checked){LS.del('rememberOverrides');LS.del('savedOverrides')}};
-$('admin-token').value=LS.get('adminToken','');
-$('admin-save').onclick=()=>{LS.set('adminToken',$('admin-token').value.trim());loadOverview();show()};
+$('admin-token').value=AUTH.get();
+$('admin-save').onclick=async()=>{if(await checkToken($('admin-token').value,$('admin-msg'))){$('admin-token').value=AUTH.get();loadOverview();show()}};
+$('admin-clear').onclick=()=>{AUTH.set('');AUTH.ok=false;$('admin-token').value='';$('admin-msg').textContent='Forgotten.'};
+$('authwarn-save').onclick=async()=>{if(await checkToken($('authwarn-token').value,$('authwarn-msg'))){$('admin-token').value=AUTH.get();loadOverview();show()}};
+$('authwarn-token').addEventListener('keydown',e=>{if(e.key==='Enter')$('authwarn-save').click()});
 onShow.settings=loadSettings;
 
 /* ---------- header chips ---------- */
-async function loadOverview(){try{const o=await api('overview');const box=clear($('chips'));const m=o.mode;
+async function loadOverview(){try{const o=await api('overview',{quiet:true});const box=clear($('chips'));const m=o.mode;
   const chip=(t,cls)=>box.append(h('span',{class:'chip '+(cls||'')},t));
   chip('API: '+m.telnyx_api,m.telnyx_api==='live'?'ok':'warn');chip('LLM: '+m.llm,m.llm==='stub'?'warn':'ok');chip('KV: '+m.kv);chip('actors: '+m.actors);chip('storage: '+m.storage);
   chip('test calls: '+(m.texml?'on':'off'),m.texml?'ok':'warn');chip('handoff: '+(m.clinic_handoff?'on':'off'));if(o.overrides.length)chip(o.overrides.length+' override(s)','warn')}catch(e){}}
-loadOverview();show();
+(async()=>{if(AUTH.get())await checkToken(AUTH.get(),null);else AUTH.ok=false;loadOverview();show()})();
 </script>
 </body>
 </html>

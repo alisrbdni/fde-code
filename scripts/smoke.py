@@ -30,6 +30,10 @@ class Api:
         self.mcp_token = mcp_token
         self.admin_token = admin_token
 
+    def vars_path(self, path: str) -> str:
+        """Variables webhooks take the token as ?token= (that's how the assistant calls them)."""
+        return f"{path}?token={self.mcp_token}" if self.mcp_token else path
+
     def call(self, method: str, path: str, body: Any = None, token: str = "",
              headers: Optional[Dict[str, str]] = None) -> Tuple[int, Any, Dict[str, str]]:
         data = None if body is None else json.dumps(body).encode()
@@ -100,7 +104,7 @@ def main() -> int:
     print(f"smoke test against {api.base} (caller {phone[:5]}***{phone[-4:]}, call {call_id})")
 
     def forge_vars() -> str:
-        status, body, headers = api.call("POST", "/webhook/dynamic-variables", payload(phone, call_id))
+        status, body, headers = api.call("POST", api.vars_path("/webhook/dynamic-variables"), payload(phone, call_id))
         assert status == 200, status
         v = body["dynamic_variables"]
         assert v["caller_phone"] == phone and headers.get("x-trace-id") == call_id, v
@@ -165,7 +169,7 @@ def main() -> int:
     cargs = {"caller_phone": patient, "call_id": clinic_call}
 
     def clinic_vars() -> str:
-        status, body, _ = api.call("POST", "/clinic/webhook/dynamic-variables", payload(patient, clinic_call))
+        status, body, _ = api.call("POST", api.vars_path("/clinic/webhook/dynamic-variables"), payload(patient, clinic_call))
         assert status == 200, status
         v = body["dynamic_variables"]
         return f"front_desk_open={v['front_desk_open']} booking_enabled={v['booking_enabled']}"

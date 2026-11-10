@@ -54,7 +54,23 @@ export class MemoryStorage {
   }
 
   /** Wire a manual alarm trigger for tests / dev (runs regardless of due time when forced). */
-  setAlarm(at: number | null): void {
+  // Same contract as the real runtime: a finite ms-since-epoch number (null throws there, so it throws here).
+  async setAlarm(at: number): Promise<void> {
+    if (typeof at !== "number" || !Number.isFinite(at)) {
+      throw new Error(`setAlarm: expected a finite ms-since-epoch number, got ${at}`)
+    }
+    this.arm(at)
+  }
+
+  async deleteAlarm(): Promise<void> {
+    this.arm(null)
+  }
+
+  async getAlarm(): Promise<number | null> {
+    return this.alarmAt ?? null
+  }
+
+  private arm(at: number | null): void {
     this.alarmAt = at
     if (this.alarmTimer) {
       clearTimeout(this.alarmTimer)
@@ -69,9 +85,6 @@ export class MemoryStorage {
     }
   }
 
-  getAlarm(): number | null {
-    return this.alarmAt
-  }
 }
 
 interface Entry {

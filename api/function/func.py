@@ -216,10 +216,11 @@ def json_error(status: int, message: str, **extra: Any) -> Response:
     return Response(status, {"error": message, **extra})
 
 
-def _token_ok(expected: str, req: Request, allow_query: bool = False) -> bool:
-    """No expected token = open (local dev). Constant-time compare."""
+def _token_ok(expected: str, req: Request, allow_query: bool = False, required: bool = False) -> bool:
+    """Constant-time bearer (or ?token=) check. With no expected token the route is open for local dev,
+    unless `required` (a public deployment): then a missing secret refuses instead of opening the route."""
     if not expected:
-        return True
+        return not required
     given = req.bearer()
     if not given and allow_query:
         given = req.query.get("token", "")
@@ -259,7 +260,7 @@ def route_name(req: Request) -> str:
         return "ops_health"
     if p.startswith("/ops/"):
         return "ops"
-    if p in ("/ui", "/favicon.ico") or p.startswith("/ui/"):
+    if p in ("/ui", "/call", "/favicon.ico") or p.startswith("/ui/"):
         return "console"
     if p in ("/docs", "/openapi.json"):
         return "docs"
@@ -398,6 +399,10 @@ class Function:
         if name in ("forge_variables", "clinic_variables"):
             if m != "POST":
                 return json_error(405, "method not allowed")
+            # The assistant calls this URL with ?token=<MCP_TOKEN>: without it anyone could look up a caller's
+            # name, appointments or drafts by POSTing a phone number.
+            if not _token_ok(s.mcp_token, req, allow_query=True, required=s.require_tokens):
+                return json_error(401, "unauthorized")
             ok, why = signature.check_webhook_signature(req.headers, req.body, s.telnyx_public_key, s.verify_signatures)
             if not ok:
                 trace.set(signature=why)
@@ -411,7 +416,7 @@ class Function:
         if name in ("check_draft", "build_agent", "clinic_triage", "clinic_book"):
             if m != "POST":
                 return json_error(405, "method not allowed")
-            if not _token_ok(s.mcp_token, req, allow_query=True):
+            if not _token_ok(s.mcp_token, req, allow_query=True, required=s.require_tokens):
                 return json_error(401, "unauthorized")
             try:
                 body = req.json()
@@ -433,7 +438,7 @@ class Function:
         if name in ("mcp", "clinic_mcp"):
             if m != "POST":
                 return Response(405, {"error": "use POST (stateless Streamable HTTP, JSON responses)"}, {"allow": "POST"})
-            if not _token_ok(s.mcp_token, req, allow_query=True):
+            if not _token_ok(s.mcp_token, req, allow_query=True, required=s.require_tokens):
                 return json_error(401, "unauthorized")
             server = tools.FORGE if name == "mcp" else clinic.SERVER
             status, raw, headers = await mcp.handle_http(app, req.body, trace, server)
@@ -463,7 +468,7 @@ class Function:
                 return json_error(405, "method not allowed")
             if not s.state_token and not s.local_state:
                 return json_error(500, "STATE_TOKEN is not configured")
-            if not _token_ok(s.state_token, req):
+            if not _token_ok(s.state_token, req, required=s.require_tokens):
                 return json_error(401, "unauthorized")
             try:
                 body = req.json()
@@ -480,7 +485,7 @@ class Function:
         if name == "ops_health" and m == "GET":
             return await self._ops_health(app, trace)
         if name == "ops":
-            if not _token_ok(s.admin_token, req):
+            if not _token_ok(s.admin_token, req, required=s.require_tokens):
                 return json_error(401, "unauthorized")
             return await self._ops(app, req, trace)
 
